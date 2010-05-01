@@ -1,0 +1,34 @@
+/.cvsignore/1.1.1.1/Tue Nov 16 05:13:14 1999//Tu2_10_11
+/Authors/1.4.2.4/Sat Nov  1 10:19:07 2003//Tu2_10_11
+/Configure.help/1.12/Sat Dec 16 08:20:47 2000//Tu2_10_11
+/Makefile.in/1.3/Fri Jun 29 02:47:25 2001//Tu2_10_11
+/exaconf.2/1.1/Sat Mar 18 05:20:28 2000//Tu2_10_11
+/fda.txt/1.1/Sat Mar 18 05:20:28 2000//Tu2_10_11
+/features.txt/1.1/Sat Mar 18 05:20:28 2000//Tu2_10_11
+/freebsd.txt/1.1/Tue Apr 18 04:02:53 2000//Tu2_10_11
+/iauth.txt/1.1/Tue May  1 11:38:34 2001//Tu2_10_11
+/irc.1/1.1.1.1/Tue Nov 16 05:13:14 1999//Tu2_10_11
+/ircd.8/1.5/Sat Jul 15 01:31:24 2000//Tu2_10_11
+/iso-time.html/1.1/Sun Apr  2 23:46:03 2000//Tu2_10_11
+/linux-poll.patch/1.1/Tue May  1 11:38:34 2001//Tu2_10_11
+/p10.html/1.5.4.1/Fri Jan 11 16:02:13 2002//Tu2_10_11
+/p10.txt/1.1.4.1/Sun Jan 11 00:23:32 2004//Tu2_10_11
+/readme.asll/1.1.2.1/Thu Jun 13 20:09:34 2002//Tu2_10_11
+/readme.chroot/1.1/Fri Jun 29 15:51:00 2001//Tu2_10_11
+/readme.crules/1.1.1.1/Tue Nov 16 05:13:14 1999//Tu2_10_11
+/readme.cvs/1.1.4.1/Sat Nov  1 10:19:07 2003//Tu2_10_11
+/readme.gline/1.2/Thu Jun 28 21:40:56 2001//Tu2_10_11
+/readme.indent/1.1.1.1/Tue Nov 16 05:13:14 1999//Tu2_10_11
+/readme.jupe/1.2/Thu May  4 18:21:48 2000//Tu2_10_11
+/readme.log/1.1.2.1/Mon Aug 12 00:29:58 2002//Tu2_10_11
+/readme.www/1.3/Tue Apr 11 23:19:17 2000//Tu2_10_11
+/rfc1413.txt/1.1/Sat Mar 18 05:20:28 2000//Tu2_10_11
+/rfc1459.unet/1.5/Sun Apr 15 06:58:56 2001//Tu2_10_11
+/snomask.html/1.2/Tue Apr 11 23:19:17 2000//Tu2_10_11
+/strings.txt/1.1/Sat Mar 18 05:20:28 2000//Tu2_10_11
+D/api////
+D/history////
+/example.conf/1.15.2.11/Sat Sep 18 02:17:46 2004//Tu2_10_11
+/ircd.conf.sample/1.1.2.4/Sat Sep 18 02:17:46 2004//Tu2_10_11
+/readme.features/1.2.2.12/Sat Sep 18 02:17:46 2004//Tu2_10_11
+/readme.who/1.3.4.1/Sat Sep 18 02:17:46 2004//Tu2_10_11

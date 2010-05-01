@@ -1,0 +1,1834 @@
+? .README.swp
+? .git
+? virtuanet.diff
+? ircd/m_pseudo.c
+? tools/mkpasswd
+Index: README
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/README,v
+retrieving revision 1.2.2.3
+diff -u -r1.2.2.3 README
+--- README	14 Sep 2002 20:44:31 -0000	1.2.2.3
++++ README	1 May 2010 21:18:58 -0000
+@@ -1,3 +1,8 @@
++Virtuanet IRC daemon, version u2.10.11.07vn
++Based on the original Undernet IRC daemon, version rcu2.10.11.07
++
++
++--------------------------------------------------------------------------------
+ 
+ 	Welcome to ircu2.10.11, the Undernet IRC daemon
+ 
+Index: doc/example.conf
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/doc/example.conf,v
+retrieving revision 1.15.2.11
+diff -u -r1.15.2.11 example.conf
+--- doc/example.conf	18 Sep 2004 02:13:26 -0000	1.15.2.11
++++ doc/example.conf	1 May 2010 21:18:58 -0000
+@@ -221,15 +221,39 @@
+ # As of ircu2.10.05 is it possible to Jupe nicks. Juped nicks need to be
+ # added to U: lines.  As per CFV-0095, the following nicks must be juped,
+ # it is not allowed to jupe others as well.
+-U:Uworld.EU.undernet.org:EuWorld,E,StatServ,NoteServ:*
+-U:Uworld2.undernet.org:UWorld2,ChanSvr,ChanSaver,ChanServ:*
+-U:Uworld.undernet.org:Uworld,NickSvr,NickSaver,NickServ:*
+-U:channels.undernet.org:LPT1,X,login:*
+-U:channels2.undernet.org:LPT2,W,Undernet:*
+-U:channels3.undernet.org:COM1,V,protocol:*
+-U:channels4.undernet.org:COM2,U,pass:*
+-U:channels5.undernet.org:COM3,Y,AUX:*
+-U:channels6.undernet.org:COM4,Z,newpass:*
++U:Operator.Services2.Virtuanet.org:UWorld2,EuWorld,E,StatServ,BotServ,HostServ:*
++U:Operator.Services.Virtuanet.org:Uworld,Stealth,U,S:*
++U:Channel.Services2.Virtuanet.org:W,V:*
++U:Channel.Services.Virtuanet.org:Oracle,ChanServ,X,login,newpass:*
++U:Security.Services.Virtuanet.org:P,ProxyScan:*
++U:Network.Services.Virtuanet.org:ChanServ,NickServ,OpServ,OperServ,MemoServ,NoteServ:*
++
++
++# [R:lines]
++#
++# Services which deal with passwords are often vulnerable to spoofing
++# attacks; users may not be able to use a service's nick when it's juped
++# on one network, but they may be able to use it on others. As a result,
++# these services often require commands be sent with directed messages
++# (nick@server). This is often inconvenient. R:lines create an internal
++# alias so users can use a much shorter command to message services.
++# R:lines could conceivably be used to implement hot-backup or failover
++# for services since they accept a list of targets.
++# R:<Command Name>:<Logical Service Name>:<Targets>
++#
++# The command name is the name of the command you would like created,
++# obviously. The logical service name is used in the ERR_SERVICESDOWN
++# reply when none of the listed targets were available. The last field
++# must be a comma-separated (no whitespace, however) list of nick@server
++# you want to be tried in order when the command is invoked.
++R:NS:NickServ:NS@Account.Services.Virtuanet.org
++R:CS:Oracle:Oracle@Channel.Services.Virtuanet.org
++R:OS:Stealth:Stealth@Operator.Services.Virtuanet.org
++R:PS:ProxyScan:ProxyScan@Security.Services.Virtuanet.org
++R:NickServ:NickServ:NS@Account.Services.Virtuanet.org
++R:ChanServ:Oracle:Oracle@Channel.Services.Virtuanet.org
++R:OperServ:Stealth:Stealth@Operator.Services.Virtuanet.org
++R:ProxyScan:ProxyScan:ProxyScan@Security.Services.Virtuanet.org
+ 
+ 
+ # [K:lines]
+@@ -267,6 +291,8 @@
+ # a match should be performed against the "real-name" / "info" field
+ # instead of the host/IP.
+ K:$R*sub7*:"You are infected with a Trojan":*
++K:$R[WarBot]*:"Compromised host":*
++K:$RHack-*:"Compromised host":*
+ 
+ 
+ # [C:lines]
+@@ -365,6 +391,30 @@
+ # Y:10:90:0:100:160000
+ 
+ 
++# [S:lines]
++# Opers may wish to hide their IP mask and hostname, even if they are on
++# a bnc. This can prevent the risk of opers or their providers getting
++# dos'd or whatever the case may be.
++#
++# When a client connects, his or her IP is compared to the incoming_IP in 
++# each of the S:lines in the conf. If it finds an exact match (NOT a mask 
++# match, but a simple comparison), it will substitute the client's ip with 
++# modified_IP and the client's real hostname with modified_hostname (as 
++# shown below).
++#
++# Syntax:
++# S:<incoming_IP>:<modified_IP>:<modifed_hostname>
++#
++# Example:
++# S:193.178.138.13:192.168.128.1:undernet.org
++#
++# If a user connects to the server with the IP 193.178.138.13, it is
++# automatically changed to 192.168.128.1 and the user's host is set to
++# undernet.org.
++#
++# If no modified_IP is provided, only the host is modified.
++
++
+ # [P:lines]
+ # When your server gets more full, you will notice delays when trying to
+ # connect to your server's primary listening port. It is possible via the
+@@ -469,7 +519,7 @@
+ # F:HAS_FERGUSON_FLUSHER:FALSE
+ # F:CLIENT_FLOOD:1024
+ # F:SERVER_PORT:4400
+-# F:NODEFAULTMOTD:TRUE
++# F:NODEFAULTMOTD:FALSE
+ # F:MOTD_BANNER
+ # F:KILL_IPMISMATCH:FALSE
+ # F:IDLE_FROM_MSG:TRUE
+@@ -479,6 +529,7 @@
+ # F:RANDOM_SEED:<you should set one explicitly>
+ # F:DEFAULT_LIST_PARAM
+ # F:NICKNAMEHISTORYLENGTH:800
++# F:TOPIC_BURST:TRUE
+ # F:HOST_HIDING:TRUE
+ # F:HIDDEN_HOST:users.undernet.org
+ # F:HIDDEN_IP:127.0.0.1
+@@ -588,6 +639,7 @@
+ # F:HIS_WHOIS_LOCALCHAN:TRUE
+ # F:HIS_WHO_SERVERNAME:TRUE
+ # F:HIS_WHO_HOPCOUNT:TRUE
++# F:HIS_MODEWHO:TRUE
+ # F:HIS_BANWHO:TRUE
+ # F:HIS_KILLWHO:TRUE
+ # F:HIS_REWRITE:TRUE
+Index: doc/readme.features
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/doc/readme.features,v
+retrieving revision 1.2.2.12
+diff -u -r1.2.2.12 readme.features
+--- doc/readme.features	18 Sep 2004 02:13:26 -0000	1.2.2.12
++++ doc/readme.features	1 May 2010 21:18:59 -0000
+@@ -230,6 +230,13 @@
+ times (unless you make it rather large).  A reasonable value is "total
+ number of clients" / 25.
+ 
++TOPIC_BURST
++ * Type: boolean
++ * Default: TRUE
++
++This selects whether topics are *sent* to other servers during a burst.
++Note that receiving topics from servers is always enabled.
++
+ HOST_HIDING
+  * Type: boolean
+  * Default: TRUE
+@@ -1063,6 +1070,13 @@
+ As per UnderNet CFV-165, this replaces hopcount to a static 3 in
+ replies to /WHO.
+ 
++HIS_MODEWHO
++ * Type: boolean
++ * Default: TRUE
++
++As per UnderNet CFV-165, this doesn't show which server performed a channel
++mode change.
++
+ HIS_BANWHO
+  * Type: boolean
+  * Default: TRUE
+Index: include/client.h
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/include/client.h,v
+retrieving revision 1.23.2.6
+diff -u -r1.23.2.6 client.h
+--- include/client.h	18 Sep 2004 02:13:26 -0000	1.23.2.6
++++ include/client.h	1 May 2010 21:18:59 -0000
+@@ -127,6 +127,7 @@
+     FLAG_GOTID,                     /* successful ident lookup achieved */
+     FLAG_DOID,                      /* I-lines say must use ident return */
+     FLAG_NONL,                      /* No \n in buffer */
++    FLAG_SLINE,                     /* User is S-lined */
+     FLAG_TS8,                       /* Why do you want to know? */
+     FLAG_MAP,                       /* Show server on the map */
+     FLAG_JUNCTION,                  /* Junction causing the net.burst */
+@@ -429,6 +430,7 @@
+ #define IsAccount(x)            HasFlag(x, FLAG_ACCOUNT)
+ #define IsHiddenHost(x)		HasFlag(x, FLAG_HIDDENHOST)
+ #define HasHiddenHost(x)	(IsAccount(x) && IsHiddenHost(x))
++#define HasSLine(x)             HasFlag(x, FLAG_SLINE)
+ 
+ #define IsPrivileged(x)         (IsAnOper(x) || IsServer(x))
+ 
+@@ -451,6 +453,7 @@
+ #define SetService(x)           SetFlag(x, FLAG_SERVICE)
+ #define SetAccount(x)           SetFlag(x, FLAG_ACCOUNT)
+ #define SetHiddenHost(x)	SetFlag(x, FLAG_HIDDENHOST)
++#define SetSLined(x)            SetFlag(x, FLAG_SLINE)
+ 
+ #define ClearAccess(x)          ClrFlag(x, FLAG_CHKACCESS)
+ #define ClearBurst(x)           ClrFlag(x, FLAG_BURST)
+Index: include/handlers.h
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/include/handlers.h,v
+retrieving revision 1.12.2.6
+diff -u -r1.12.2.6 handlers.h
+--- include/handlers.h	15 Dec 2002 01:02:38 -0000	1.12.2.6
++++ include/handlers.h	1 May 2010 21:18:59 -0000
+@@ -118,6 +118,7 @@
+ extern int m_private(struct Client*, struct Client*, int, char*[]);
+ extern int m_privmsg(struct Client*, struct Client*, int, char*[]);
+ extern int m_proto(struct Client*, struct Client*, int, char*[]);
++extern int m_pseudo(struct Client*, struct Client*, int, char*[]);
+ extern int m_quit(struct Client*, struct Client*, int, char*[]);
+ extern int m_registered(struct Client*, struct Client*, int, char*[]);
+ extern int m_silence(struct Client*, struct Client*, int, char*[]);
+Index: include/ircd_features.h
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/include/ircd_features.h,v
+retrieving revision 1.11.2.13
+diff -u -r1.11.2.13 ircd_features.h
+--- include/ircd_features.h	18 Sep 2004 02:13:27 -0000	1.11.2.13
++++ include/ircd_features.h	1 May 2010 21:18:59 -0000
+@@ -44,6 +44,7 @@
+   FEAT_RANDOM_SEED,
+   FEAT_DEFAULT_LIST_PARAM,
+   FEAT_NICKNAMEHISTORYLENGTH,
++  FEAT_TOPIC_BURST,
+   FEAT_HOST_HIDING,
+   FEAT_HIDDEN_HOST,
+   FEAT_HIDDEN_IP,
+@@ -154,6 +155,7 @@
+   FEAT_HIS_STATS_p,
+   FEAT_HIS_STATS_q,
+   FEAT_HIS_STATS_r,
++  FEAT_HIS_STATS_R,
+   FEAT_HIS_STATS_d,
+   FEAT_HIS_STATS_e,
+   FEAT_HIS_STATS_t,
+@@ -170,6 +172,7 @@
+   FEAT_HIS_WHOIS_LOCALCHAN,
+   FEAT_HIS_WHO_SERVERNAME,
+   FEAT_HIS_WHO_HOPCOUNT,
++  FEAT_HIS_MODEWHO,
+   FEAT_HIS_BANWHO,
+   FEAT_HIS_KILLWHO,
+   FEAT_HIS_REWRITE,
+Index: include/msg.h
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/include/msg.h,v
+retrieving revision 1.11.2.3
+diff -u -r1.11.2.3 msg.h
+--- include/msg.h	15 Dec 2002 01:02:38 -0000	1.11.2.3
++++ include/msg.h	1 May 2010 21:18:59 -0000
+@@ -362,6 +362,8 @@
+                                          * clients.                           */
+ #define   MFLG_IGNORE            0x04   /* silently ignore command from
+                                          * unregistered clients */
++#define   MFLG_EXTRA             0x08   /* Handler requests that mptr->extra
++                                         * be passed in parv[1] */
+ 
+ /*
+  * Structures
+@@ -375,6 +377,7 @@
+                                    to be used only on the average of once per 2
+                                    seconds -SRB */
+   unsigned int bytes;         /* bytes received for this message */
++  void *extra;
+   /*
+    * cptr = Connected client ptr
+    * sptr = Source client ptr
+Index: include/numeric.h
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/include/numeric.h,v
+retrieving revision 1.18.2.6
+diff -u -r1.18.2.6 numeric.h
+--- include/numeric.h	7 Jan 2003 11:15:41 -0000	1.18.2.6
++++ include/numeric.h	1 May 2010 21:18:59 -0000
+@@ -171,6 +171,7 @@
+ /*      RPL_END_NOTIFY       274           aircd */
+ /*      RPL_STATSDELTA       274           IRCnet extension */
+ #define RPL_STATSDLINE       275        /* Undernet extension */
++#define RPL_STATSRLINE       276        /* Undernet extension */
+ 
+ #define RPL_GLIST            280        /* Undernet extension */
+ #define RPL_ENDOFGLIST       281        /* Undernet extension */
+@@ -350,7 +351,7 @@
+ #define ERR_NICKTOOFAST      438        /* Undernet extension */
+      /* ERR_DEAD             438           IRCnet reserved for later use */
+ #define ERR_TARGETTOOFAST    439        /* Undernet extension */
+-/*	ERR_SERVICESDOWN     440	Dalnet,unreal */
++#define ERR_SERVICESDOWN     440        /* Dalnet,unreal */
+ #define ERR_USERNOTINCHANNEL 441
+ #define ERR_NOTONCHANNEL     442
+ #define ERR_USERONCHANNEL    443
+Index: include/parse.h
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/include/parse.h,v
+retrieving revision 1.2
+diff -u -r1.2 parse.h
+--- include/parse.h	18 Mar 2000 05:20:28 -0000	1.2
++++ include/parse.h	1 May 2010 21:18:59 -0000
+@@ -7,6 +7,7 @@
+ #define INCLUDED_parse_h
+ 
+ struct Client;
++struct s_map;
+ 
+ /*
+  * Prototypes
+@@ -16,4 +17,7 @@
+ extern int parse_server(struct Client *cptr, char *buffer, char *bufend);
+ extern void initmsgtree(void);
+ 
++extern int register_mapping(struct s_map *map);
++extern int unregister_mapping(struct s_map *map);
++
+ #endif /* INCLUDED_parse_h */
+Index: include/patchlevel.h
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/include/patchlevel.h,v
+retrieving revision 1.10.4.66
+diff -u -r1.10.4.66 patchlevel.h
+--- include/patchlevel.h	18 Sep 2004 02:13:27 -0000	1.10.4.66
++++ include/patchlevel.h	1 May 2010 21:18:59 -0000
+@@ -18,7 +18,7 @@
+  * $Id: patchlevel.h,v 1.10.4.66 2004/09/18 02:13:27 klmitch Exp $
+  *
+  */
+-#define PATCHLEVEL "07"
++#define PATCHLEVEL "07vn"
+ 
+ #define RELEASE ".11."
+ 
+Index: include/s_conf.h
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/include/s_conf.h,v
+retrieving revision 1.15.2.2
+diff -u -r1.15.2.2 s_conf.h
+--- include/s_conf.h	18 Sep 2004 02:13:27 -0000	1.15.2.2
++++ include/s_conf.h	1 May 2010 21:18:59 -0000
+@@ -21,6 +21,7 @@
+ struct Client;
+ struct SLink;
+ struct TRecord;
++struct Message;
+ 
+ 
+ /*
+@@ -33,6 +34,7 @@
+ 
+ #define CONF_ILLEGAL            0x80000000
+ #define CONF_MATCH              0x40000000
++#define CONF_SPOOF              0x20000000
+ #define CONF_CLIENT             0x0002
+ #define CONF_SERVER             0x0004
+ #define CONF_LOCOP              0x0010
+@@ -149,6 +151,20 @@
+   ACR_BAD_SOCKET
+ };
+ 
++struct nick_host {
++  char *nick;
++  char *host;
++};
++
++struct s_map {
++  struct s_map *next;
++  struct Message *msg;
++  char *name;
++  char *command;
++  struct nick_host *services;
++  unsigned int count;
++};
++
+ struct qline {
+   struct qline *next;
+   char *chname;
+@@ -164,6 +180,7 @@
+ extern struct MotdItem* motd;
+ extern struct MotdItem* rmotd;
+ extern struct TRecord*  tdata;
++extern struct s_map* GlobalServiceMapList;
+ extern struct qline*	GlobalQuarantineList;
+ 
+ /*
+Index: ircd/Makefile.in
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/Makefile.in,v
+retrieving revision 1.37.2.11
+diff -u -r1.37.2.11 Makefile.in
+--- ircd/Makefile.in	1 Nov 2003 10:19:09 -0000	1.37.2.11
++++ ircd/Makefile.in	1 May 2010 21:18:59 -0000
+@@ -145,6 +145,7 @@
+ 	m_privmsg.c \
+ 	m_privs.c \
+ 	m_proto.c \
++	m_pseudo.c \
+ 	m_quit.c \
+ 	m_rehash.c \
+ 	m_reset.c \
+Index: ircd/channel.c
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/channel.c,v
+retrieving revision 1.73.2.16
+diff -u -r1.73.2.16 channel.c
+--- ircd/channel.c	18 Sep 2004 02:13:27 -0000	1.73.2.16
++++ ircd/channel.c	1 May 2010 21:19:00 -0000
+@@ -848,6 +848,10 @@
+     msgq_clean(mb);
+   }                             /* Continue when there was something
+                                  that didn't fit (full==1) */
++
++  if (feature_bool(FEAT_TOPIC_BURST) && *chptr->topic)
++    sendcmdto_one(&me, CMD_TOPIC, cptr, "%H %Tu :%s", chptr,
++		chptr->topic_time, chptr->topic);
+ }
+ 
+ /*
+@@ -1380,7 +1384,8 @@
+     return 0;
+ 
+   /* Ok, if we were given the OPMODE flag or if it's a server, hide source */
+-  if (mbuf->mb_dest & MODEBUF_DEST_OPMODE || IsServer(mbuf->mb_source))
++  if (feature_bool(FEAT_HIS_MODEWHO) && 
++      (mbuf->mb_dest & MODEBUF_DEST_OPMODE || IsServer(mbuf->mb_source)))
+     app_source = &me;
+   else
+     app_source = mbuf->mb_source;
+Index: ircd/ircd_features.c
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/ircd_features.c,v
+retrieving revision 1.15.2.14
+diff -u -r1.15.2.14 ircd_features.c
+--- ircd/ircd_features.c	18 Sep 2004 02:13:28 -0000	1.15.2.14
++++ ircd/ircd_features.c	1 May 2010 21:19:00 -0000
+@@ -234,7 +234,7 @@
+   /* Misc. features */
+   F_N(LOG, FEAT_MYOPER, feature_log_set, feature_log_reset, feature_log_get,
+       0, log_feature_unmark, log_feature_mark, log_feature_report),
+-  F_S(DOMAINNAME, 0, DOMAINNAME, 0),
++  F_S(DOMAINNAME, 0, "virtuanet.org", 0),
+   F_B(RELIABLE_CLOCK, 0, 0, 0),
+   F_I(BUFFERPOOL, 0, 27000000, 0),
+   F_B(HAS_FERGUSON_FLUSHER, 0, 0, 0),
+@@ -251,18 +251,19 @@
+   F_N(RANDOM_SEED, FEAT_NODISP, random_seed_set, 0, 0, 0, 0, 0, 0),
+   F_S(DEFAULT_LIST_PARAM, FEAT_NULL, 0, list_set_default),
+   F_I(NICKNAMEHISTORYLENGTH, 0, 800, whowas_realloc),
++  F_B(TOPIC_BURST, 0, 1, 0),
+   F_B(HOST_HIDING, 0, 1, 0),
+-  F_S(HIDDEN_HOST, FEAT_CASE, "users.undernet.org", 0),
++  F_S(HIDDEN_HOST, FEAT_CASE, "users.virtuanet.org", 0),
+   F_S(HIDDEN_IP, 0, "127.0.0.1", 0),
+   F_B(AUTOHIDE, 0, 1, 0),
+   F_B(CONNEXIT_NOTICES, 0, 0, 0),
+ 
+   /* features that probably should not be touched */
+   F_I(KILLCHASETIMELIMIT, 0, 30, 0),
+-  F_I(MAXCHANNELSPERUSER, 0, 10, 0),
+-  F_I(NICKLEN, 0, 12, 0),
++  F_I(MAXCHANNELSPERUSER, 0, 15, 0),
++  F_I(NICKLEN, 0, 15, 0),
+   F_I(AVBANLEN, 0, 40, 0),
+-  F_I(MAXBANS, 0, 45, 0),
++  F_I(MAXBANS, 0, 50, 0),
+   F_I(MAXSILES, 0, 15, 0),
+   F_I(HANGONGOODLINK, 0, 300, 0),
+   F_I(HANGONRETRYDELAY, 0, 10, 0),
+@@ -339,13 +340,13 @@
+   F_B(LOCOP_WIDE_GLINE, 0, 0, 0),
+   
+   /* HEAD_IN_SAND Features */
+-  F_B(HIS_SNOTICES, 0, 1, 0),
+-  F_B(HIS_SNOTICES_OPER_ONLY, 0, 1, 0),
++  F_B(HIS_SNOTICES, 0, 0, 0),
++  F_B(HIS_SNOTICES_OPER_ONLY, 0, 0, 0),
+   F_B(HIS_DESYNCS, 0, 1, 0),
+   F_B(HIS_DEBUG_OPER_ONLY, 0, 1, 0),
+-  F_B(HIS_WALLOPS, 0, 1, 0),
+-  F_B(HIS_MAP, 0, 1, 0),
+-  F_B(HIS_LINKS, 0, 1, 0),
++  F_B(HIS_WALLOPS, 0, 0, 0),
++  F_B(HIS_MAP, 0, 0, 0),
++  F_B(HIS_LINKS, 0, 0, 0),
+   F_B(HIS_TRACE, 0, 1, 0),
+   F_B(HIS_STATS_l, 0, 1, 0),
+   F_B(HIS_STATS_c, 0, 1, 0),
+@@ -357,9 +358,10 @@
+   F_B(HIS_STATS_j, 0, 1, 0),
+   F_B(HIS_STATS_M, 0, 1, 0),
+   F_B(HIS_STATS_m, 0, 1, 0),
+-  F_B(HIS_STATS_o, 0, 1, 0),
++  F_B(HIS_STATS_o, 0, 0, 0),
+   F_B(HIS_STATS_p, 0, 1, 0),
+   F_B(HIS_STATS_q, 0, 1, 0),
++  F_B(HIS_STATS_R, 0, 1, 0),
+   F_B(HIS_STATS_r, 0, 1, 0),
+   F_B(HIS_STATS_d, 0, 1, 0),
+   F_B(HIS_STATS_e, 0, 1, 0),
+@@ -372,23 +374,24 @@
+   F_B(HIS_STATS_x, 0, 1, 0),
+   F_B(HIS_STATS_y, 0, 1, 0),
+   F_B(HIS_STATS_z, 0, 1, 0),
+-  F_B(HIS_WHOIS_SERVERNAME, 0, 1, 0),
+-  F_B(HIS_WHOIS_IDLETIME, 0, 1, 0),
+-  F_B(HIS_WHOIS_LOCALCHAN, 0, 1, 0),
+-  F_B(HIS_WHO_SERVERNAME, 0, 1, 0),
+-  F_B(HIS_WHO_HOPCOUNT, 0, 1, 0),
+-  F_B(HIS_BANWHO, 0, 1, 0),
+-  F_B(HIS_KILLWHO, 0, 1, 0),
+-  F_B(HIS_REWRITE, 0, 1, 0),
+-  F_I(HIS_REMOTE, 0, 1, 0),
+-  F_B(HIS_NETSPLIT, 0, 1, 0),
+-  F_S(HIS_SERVERNAME, 0, "*.undernet.org", 0),
+-  F_S(HIS_SERVERINFO, 0, "The Undernet Underworld", 0),
+-  F_S(HIS_URLSERVERS, 0, "http://www.undernet.org/servers.php", 0),
++  F_B(HIS_WHOIS_SERVERNAME, 0, 0, 0),
++  F_B(HIS_WHOIS_IDLETIME, 0, 0, 0),
++  F_B(HIS_WHOIS_LOCALCHAN, 0, 0, 0),
++  F_B(HIS_WHO_SERVERNAME, 0, 0, 0),
++  F_B(HIS_WHO_HOPCOUNT, 0, 0, 0),
++  F_B(HIS_MODEWHO, 0, 0, 0),
++  F_B(HIS_BANWHO, 0, 0, 0),
++  F_B(HIS_KILLWHO, 0, 0, 0),
++  F_B(HIS_REWRITE, 0, 0, 0),
++  F_I(HIS_REMOTE, 0, 0, 0),
++  F_B(HIS_NETSPLIT, 0, 0, 0),
++  F_S(HIS_SERVERNAME, 0, "servers.virtuanet.org", 0),
++  F_S(HIS_SERVERINFO, 0, "Virtuanet IRC Network", 0),
++  F_S(HIS_URLSERVERS, 0, "http://www.virtuanet.org/servers", 0),
+ 
+   /* Misc. random stuff */
+-  F_S(NETWORK, 0, "UnderNet", 0),
+-  F_S(URL_CLIENTS, 0, "ftp://ftp.undernet.org/pub/irc/clients", 0),
++  F_S(NETWORK, 0, "Virtuanet", 0),
++  F_S(URL_CLIENTS, 0, "http://www.irc.org/links.html", 0),
+ 
+ #undef F_S
+ #undef F_B
+Index: ircd/ircd_log.c
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/ircd_log.c,v
+retrieving revision 1.12.2.2
+diff -u -r1.12.2.2 ircd_log.c
+--- ircd/ircd_log.c	24 Aug 2002 16:08:48 -0000	1.12.2.2
++++ ircd/ircd_log.c	1 May 2010 21:19:00 -0000
+@@ -395,7 +395,7 @@
+ 
+   /* Build the basic log string */
+   vd.vd_format = fmt;
+-  vd.vd_args = vl;
++  va_copy(vd.vd_args, vl);
+ 
+   /* save the length for writev */
+   /* Log format: "SYSTEM [SEVERITY]: log message" */
+Index: ircd/m_topic.c
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/m_topic.c,v
+retrieving revision 1.9.2.3
+diff -u -r1.9.2.3 m_topic.c
+--- ircd/m_topic.c	18 Sep 2004 02:13:28 -0000	1.9.2.3
++++ ircd/m_topic.c	1 May 2010 21:19:00 -0000
+@@ -93,13 +93,15 @@
+ #include "send.h"
+ 
+ #include <assert.h>
++#include <stdlib.h>
+ 
+ static void do_settopic(struct Client *sptr, struct Client *cptr, 
+-		        struct Channel *chptr,char *topic)
++		        struct Channel *chptr,char *topic, time_t ts)
+ {
+    int newtopic;
++   struct Client *from = sptr;
+    /* if +t and not @'d, return an error and ignore the topic */
+-   if ((chptr->mode.mode & MODE_TOPICLIMIT) != 0 && !is_chan_op(sptr, chptr)) 
++   if (!IsServer(sptr) && (chptr->mode.mode & MODE_TOPICLIMIT) != 0 && !is_chan_op(sptr, chptr)) 
+    {
+       send_reply(sptr, ERR_CHANOPRIVSNEEDED, chptr->chname);
+       return;
+@@ -115,12 +117,12 @@
+    newtopic=ircd_strncmp(chptr->topic,topic,TOPICLEN)!=0;
+    /* setting a topic */
+    ircd_strncpy(chptr->topic, topic, TOPICLEN);
+-   ircd_strncpy(chptr->topic_nick, cli_name(sptr), NICKLEN);
+-   chptr->topic_time = CurrentTime;
++   ircd_strncpy(chptr->topic_nick, cli_name(from), NICKLEN);
++   chptr->topic_time = ts ? ts : CurrentTime;
+    /* Fixed in 2.10.11: Don't propagate local topics */
+    if (!IsLocalChannel(chptr->chname))
+-     sendcmdto_serv_butone(sptr, CMD_TOPIC, cptr, "%H :%s", chptr,
+-		           chptr->topic);
++     sendcmdto_serv_butone(sptr, CMD_TOPIC, cptr, "%H %Tu :%s", chptr,
++		           chptr->topic_time, chptr->topic);
+    if (newtopic)
+       sendcmdto_channel_butserv_butone(sptr, CMD_TOPIC, chptr, NULL,
+       				       "%H :%s", chptr, chptr->topic);
+@@ -178,7 +180,7 @@
+       }
+     }
+     else 
+-     do_settopic(sptr,cptr,chptr,topic);
++     do_settopic(sptr,cptr,chptr,topic,0);
+   }
+   return 0;
+ }
+@@ -188,12 +190,14 @@
+  *
+  * parv[0]        = sender prefix
+  * parv[1]        = channel
++ * parv[parc - 2] = timestamp (optional)
+  * parv[parc - 1] = topic
+  */
+ int ms_topic(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
+ {
+   struct Channel *chptr;
+   char *topic = 0, *name, *p = 0;
++  time_t ts = 0;
+ 
+   if (parc < 3)
+     return need_more_params(sptr, "TOPIC");
+@@ -217,7 +221,9 @@
+       continue;
+     }
+ 
+-    do_settopic(sptr,cptr,chptr,topic);
++    if (parc > 3 && (ts = atoi(parv[parc - 2])) && chptr->topic_time > ts)
++      continue;
++    do_settopic(sptr,cptr,chptr,topic, ts);
+   }
+   return 0;
+ }
+Index: ircd/parse.c
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/parse.c,v
+retrieving revision 1.30.2.10
+diff -u -r1.30.2.10 parse.c
+--- ircd/parse.c	18 Sep 2004 02:13:28 -0000	1.30.2.10
++++ ircd/parse.c	1 May 2010 21:19:01 -0000
+@@ -67,518 +67,518 @@
+   {
+     MSG_PRIVATE,
+     TOK_PRIVATE,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_privmsg, ms_privmsg, mo_privmsg, m_ignore }
+   },
+   {
+     MSG_NICK,
+     TOK_NICK,
+-    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0,
++    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_nick, m_nick, ms_nick, m_nick, m_ignore }
+   },
+   {
+     MSG_NOTICE,
+     TOK_NOTICE,
+-    0, MAXPARA, MFLG_SLOW | MFLG_IGNORE, 0,
++    0, MAXPARA, MFLG_SLOW | MFLG_IGNORE, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_ignore, m_notice, ms_notice, mo_notice, m_ignore }
+   },
+   {
+     MSG_WALLCHOPS,
+     TOK_WALLCHOPS,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL, 
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_wallchops, ms_wallchops, m_wallchops, m_ignore }
+   },
+   {
+     MSG_WALLVOICES,
+     TOK_WALLVOICES,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_wallvoices, ms_wallvoices, m_wallvoices, m_ignore }
+   },
+   {
+     MSG_CPRIVMSG,
+     TOK_CPRIVMSG,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_cprivmsg, m_ignore, m_cprivmsg, m_ignore }
+   },
+   {
+     MSG_CNOTICE,
+     TOK_CNOTICE,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_cnotice, m_ignore, m_cnotice, m_ignore }
+   },
+   {
+     MSG_JOIN,
+     TOK_JOIN,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_join, ms_join, m_join, m_ignore }
+   },
+   {
+     MSG_MODE,
+     TOK_MODE,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_mode, ms_mode, m_mode, m_ignore }
+   },
+   {
+     MSG_BURST,
+     TOK_BURST,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_ignore, m_ignore, ms_burst, m_ignore, m_ignore }
+   },
+   {
+     MSG_CREATE,
+     TOK_CREATE,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_ignore, m_ignore, ms_create, m_ignore, m_ignore }
+   },
+   {
+     MSG_DESTRUCT,
+     TOK_DESTRUCT,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_ignore, m_ignore, ms_destruct, m_ignore, m_ignore }
+   },
+   {
+     MSG_QUIT,
+     TOK_QUIT,
+-    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0,
++    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_quit, m_quit, ms_quit, m_quit, m_ignore }
+   },
+   {
+     MSG_PART,
+     TOK_PART,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_part, ms_part, m_part, m_ignore }
+   },
+   {
+     MSG_TOPIC,
+     TOK_TOPIC,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_topic, ms_topic, m_topic, m_ignore }
+   },
+   {
+     MSG_INVITE,
+     TOK_INVITE,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_invite, ms_invite, m_invite, m_ignore }
+   },
+   {
+     MSG_KICK,
+     TOK_KICK,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_kick, ms_kick, m_kick, m_ignore }
+   },
+   {
+     MSG_WALLOPS,
+     TOK_WALLOPS,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, ms_wallops, mo_wallops, m_ignore }
+   },
+   {
+     MSG_WALLUSERS,
+     TOK_WALLUSERS,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, ms_wallusers, mo_wallusers, m_ignore }
+   },
+   {
+     MSG_DESYNCH,
+     TOK_DESYNCH,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_ignore, m_ignore, ms_desynch, m_ignore, m_ignore }
+   },
+   {
+     MSG_PING,
+     TOK_PING,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_ping, ms_ping, mo_ping, m_ignore }
+   },
+   {
+     MSG_PONG,
+     TOK_PONG,
+-    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0,
++    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { mr_pong, m_pong, ms_pong, m_pong, m_ignore }
+   },
+   {
+     MSG_ERROR,
+     TOK_ERROR,
+-    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0,
++    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { mr_error, m_ignore, ms_error, m_ignore, m_ignore }
+   },
+   {
+     MSG_KILL,
+     TOK_KILL,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, ms_kill, mo_kill, m_ignore }
+   },
+   {
+     MSG_USER,
+     TOK_USER,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_user, m_registered, m_ignore, m_registered, m_ignore }
+   },
+   {
+     MSG_AWAY,
+     TOK_AWAY,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_away, ms_away, m_away, m_ignore }
+   },
+   {
+     MSG_ISON,
+     TOK_ISON,
+-    0, 1, MFLG_SLOW, 0,
++    0, 1, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_ison, m_ignore, m_ison, m_ignore }
+   },
+   {
+     MSG_SERVER,
+     TOK_SERVER,
+-    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0,
++    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { mr_server, m_registered, ms_server, m_registered, m_ignore }
+   },
+   {
+     MSG_SQUIT,
+     TOK_SQUIT,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, ms_squit, mo_squit, m_ignore }
+   },
+   {
+     MSG_WHOIS,
+     TOK_WHOIS,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_whois, ms_whois, m_whois, m_ignore }
+   },
+   {
+     MSG_WHO,
+     TOK_WHO,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_who, m_ignore, m_who, m_ignore }
+   },
+   {
+     MSG_WHOWAS,
+     TOK_WHOWAS,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_whowas, m_whowas, m_whowas, m_ignore }
+   },
+   {
+     MSG_LIST,
+     TOK_LIST,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_list, m_ignore, m_list, m_ignore }
+   },
+   {
+     MSG_NAMES,
+     TOK_NAMES,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_names, ms_names, m_names, m_ignore }
+   },
+   {
+     MSG_USERHOST,
+     TOK_USERHOST,
+-    0, 1, MFLG_SLOW, 0,
++    0, 1, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_userhost, m_ignore, m_userhost, m_ignore }
+   },
+   {
+     MSG_USERIP,
+     TOK_USERIP,
+-    0, 1, MFLG_SLOW, 0,
++    0, 1, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_userip, m_ignore, m_userip, m_ignore }
+   },
+   {
+     MSG_TRACE,
+     TOK_TRACE,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_trace, ms_trace, mo_trace, m_ignore }
+   },
+   {
+     MSG_PASS,
+     TOK_PASS,
+-    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0,
++    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { mr_pass, m_registered, m_ignore, m_registered, m_ignore }
+   },
+   {
+     MSG_LUSERS,
+     TOK_LUSERS,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_lusers, ms_lusers, m_lusers, m_ignore }
+   },
+   {
+     MSG_TIME,
+     TOK_TIME,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_time, m_time, m_time, m_ignore }
+   },
+   {
+     MSG_SETTIME,
+     TOK_SETTIME,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_ignore, ms_settime, mo_settime, m_ignore }
+   },
+   {
+     MSG_RPING,
+     TOK_RPING,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, ms_rping, mo_rping, m_ignore }
+   },
+   {
+     MSG_RPONG,
+     TOK_RPONG,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_ignore, ms_rpong, m_ignore, m_ignore }
+   },
+   {
+     MSG_OPER,
+     TOK_OPER,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_oper, ms_oper, mo_oper, m_ignore }
+   },
+   {
+     MSG_CONNECT,
+     TOK_CONNECT,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, ms_connect, mo_connect, m_ignore }
+   },
+   {
+     MSG_MAP,
+     TOK_MAP,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_map, m_ignore, m_map, m_ignore }
+   },
+   {
+     MSG_VERSION,
+     TOK_VERSION,
+-    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0,
++    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_version, m_version, ms_version, mo_version, m_ignore }
+   },
+   {
+     MSG_STATS,
+     TOK_STATS,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_stats, m_stats, m_stats, m_ignore }
+   },
+   {
+     MSG_LINKS,
+     TOK_LINKS,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_links, ms_links, m_links, m_ignore }
+   },
+   {
+     MSG_ADMIN,
+     TOK_ADMIN,
+-    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0,
++    0, MAXPARA, MFLG_SLOW | MFLG_UNREG, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_admin, m_admin, ms_admin, mo_admin, m_ignore }
+   },
+   {
+     MSG_HELP,
+     TOK_HELP,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_help, m_ignore, m_help, m_ignore }
+   },
+   {
+     MSG_INFO,
+     TOK_INFO,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_info, ms_info, mo_info, m_ignore }
+   },
+   {
+     MSG_MOTD,
+     TOK_MOTD,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_motd, m_motd, m_motd, m_ignore }
+   },
+   {
+     MSG_CLOSE,
+     TOK_CLOSE,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, m_ignore, mo_close, m_ignore }
+   },
+   {
+     MSG_SILENCE,
+     TOK_SILENCE,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_silence, ms_silence, m_silence, m_ignore }
+   },
+   {
+     MSG_GLINE,
+     TOK_GLINE,
+-    0, MAXPARA,         0, 0,
++    0, MAXPARA,         0, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_gline, ms_gline, mo_gline, m_ignore }
+   },
+   {
+     MSG_JUPE,
+     TOK_JUPE,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, ms_jupe, mo_jupe, m_ignore }
+   },
+   {
+     MSG_OPMODE,
+     TOK_OPMODE,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, ms_opmode, mo_opmode, m_ignore }
+   },
+   {
+     MSG_CLEARMODE,
+     TOK_CLEARMODE,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, ms_clearmode, mo_clearmode, m_ignore }
+   },
+   {
+     MSG_UPING,
+     TOK_UPING,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, ms_uping, mo_uping, m_ignore }
+   },
+   {
+     MSG_END_OF_BURST,
+     TOK_END_OF_BURST,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_ignore, m_ignore, ms_end_of_burst, m_ignore, m_ignore }
+   },
+   {
+     MSG_END_OF_BURST_ACK,
+     TOK_END_OF_BURST_ACK,
+-    0, MAXPARA, 1, 0,
++    0, MAXPARA, 1, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_ignore, m_ignore, ms_end_of_burst_ack, m_ignore, m_ignore }
+   },
+   {
+     MSG_HASH,
+     TOK_HASH,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_hash, m_hash, m_hash, m_ignore }
+   },
+   {
+     MSG_DNS,
+     TOK_DNS,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_ignore, m_ignore, m_dns, m_ignore }
+   },
+   {
+     MSG_REHASH,
+     TOK_REHASH,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, m_ignore, mo_rehash, m_ignore }
+   },
+   {
+     MSG_RESTART,
+     TOK_RESTART,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, m_ignore, mo_restart, m_ignore }
+   },
+   {
+     MSG_DIE,
+     TOK_DIE,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, m_ignore, mo_die, m_ignore }
+   },
+   {
+     MSG_PROTO,
+     TOK_PROTO,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_proto, m_proto, m_proto, m_proto, m_ignore }
+   },
+   {
+     MSG_SET,
+     TOK_SET,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, m_ignore, mo_set, m_ignore }
+   },
+   {
+     MSG_RESET,
+     TOK_RESET,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, m_ignore, mo_reset, m_ignore }
+   },
+   {
+     MSG_GET,
+     TOK_GET,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, m_ignore, mo_get, m_ignore }
+   },
+   {
+     MSG_PRIVS,
+     TOK_PRIVS,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_unregistered, m_not_oper, m_ignore, mo_privs, m_ignore }
+   },
+   {
+     MSG_ACCOUNT,
+     TOK_ACCOUNT,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_ignore, m_ignore, ms_account, m_ignore, m_ignore }
+   },
+   {
+     MSG_ASLL,
+     TOK_ASLL,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_ignore, m_not_oper, ms_asll, mo_asll, m_ignore }
+   },
+@@ -591,7 +591,7 @@
+   {
+     MSG_POST,
+     TOK_POST,
+-    0, MAXPARA, MFLG_SLOW, 0,
++    0, MAXPARA, MFLG_SLOW, 0, NULL,
+     /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+     { m_quit, m_ignore, m_ignore, m_ignore, m_ignore }
+   },
+@@ -812,6 +812,166 @@
+   }
+ }
+ 
++/* Inserts a single entry into a message tree; must use this function
++   when inserting messages at runtime. */
++static void msg_tree_insert(struct MessageTree *mtree, char *prefix,
++    char *key, struct Message *mptr)
++{
++  char newprefix[64];           /* Must be longer than every command name */
++  int c, c2, lp;
++  struct MessageTree *mtree1;
++
++  lp = strlen(prefix);
++  if (!lp || !strncmp(key, prefix, lp))
++  {
++    /* command in this prefix */
++    if (0 == ircd_strcmp(key, prefix))
++    {
++      mtree->final = "";
++      mtree->msg = mptr;
++      return;
++    }
++    for (c = 'A'; c <= 'Z'; ++c)
++    {
++      if (key[lp] == c)
++      {
++        if(!mtree->pointers[c - 'A'])
++        {
++          mtree1 = (struct MessageTree *)MyMalloc(sizeof(struct MessageTree));
++          for (c2 = 0; c2 < 26; ++c2)
++            mtree1->pointers[c2] = NULL;
++          mtree1->final = key + lp + 1;
++          mtree1->msg = mptr;
++          mtree->pointers[c - 'A'] = mtree1;
++          return;
++        }
++        else
++        {
++          mtree1 = mtree->pointers[c - 'A'];
++        }
++        strcpy(newprefix, prefix);
++        newprefix[lp] = c;
++        newprefix[lp + 1] = '\0';
++        msg_tree_insert(mtree1, newprefix, key, mptr);
++        return;
++      }
++    }
++  }
++  /*
++   * This should never happen
++   */
++  assert(0);
++  exit(1);
++}
++
++/* Removes an entry from the message tree; suitable for use at runtime. */
++static struct MessageTree *msg_tree_remove(struct MessageTree *root, char *key)
++{
++  struct MessageTree *remove;
++  int c, empty;
++
++  if (root->final && (0 == ircd_strcmp(root->final, key)))
++  {
++    empty = 1;
++    for (c = 'A'; c <= 'Z'; ++c)
++    {
++      if(root->pointers[c - 'A'])
++      {
++        empty = 0;
++        break;
++      }
++    }
++    root->final = NULL;
++    root->msg = NULL;
++    return empty ? root : NULL;
++  }
++
++  empty = root->final ? 0 : 1;
++  remove = NULL;
++  for (c = 'A'; c <= 'Z'; ++c)
++  {
++    if (root->pointers[c - 'A'])
++    {
++      if (c == *key)
++      {
++        remove = msg_tree_remove(root->pointers[c - 'A'], key + 1);
++        if (remove)
++        {
++          root->pointers[c - 'A'] = NULL;
++          MyFree(remove);
++          empty &= 1;
++        }
++        else
++        {
++          empty = 0;
++        }
++        if (!empty)
++        {
++            break;
++        }
++      }
++      else
++      {
++        empty = 0;
++      }
++    }
++  }
++
++  return empty ? root : NULL;
++}
++
++/* Registers a service mapping to the pseudocommand handler. */
++int register_mapping(struct s_map *map)
++{
++  struct Message *msg;
++
++  if (msg_tree_parse_client(map->command, &msg_tree_cmd))
++  {
++    return 0;
++  }
++
++  msg = (struct Message *)MyMalloc(sizeof(struct Message));
++  msg->cmd = map->command;
++  msg->tok = map->command;
++  msg->count = 0;
++  msg->parameters = 2;
++  msg->flags = MFLG_SLOW | MFLG_EXTRA;
++  msg->bytes = 0;
++  msg->extra = map;
++
++  msg->handlers[UNREGISTERED_HANDLER] = m_ignore;
++  msg->handlers[CLIENT_HANDLER] = m_pseudo;
++  msg->handlers[SERVER_HANDLER] = m_ignore;
++  msg->handlers[OPER_HANDLER] = m_pseudo;
++  msg->handlers[SERVICE_HANDLER] = m_ignore;
++
++  /* Service mappings are only applicable to clients; insert the
++     pseudocommand into the command tree only. */
++  msg_tree_insert(&msg_tree_cmd, "", msg->cmd, msg);
++  map->msg = msg;
++
++  return 1;
++}
++
++/* Removes a service mapping. */
++int unregister_mapping(struct s_map *map)
++{
++  if (!msg_tree_parse_client(map->command, &msg_tree_cmd))
++  {
++    /* This simply should never happen. */
++    assert(0);
++    return 0;
++  }
++
++  msg_tree_remove(&msg_tree_cmd, map->msg->cmd);
++
++  map->msg->extra = NULL;
++  MyFree(map->msg);
++  map->msg = NULL;
++
++  return 1;
++}
++
+ /*
+  * parse a buffer.
+  *
+@@ -906,7 +1066,18 @@
+ 
+   /* Note initially true: s==NULL || *(s-1) == '\0' !! */
+ 
+-  i = 0;
++  if ((mptr->flags & MFLG_EXTRA)) {
++      /* HACK: The handler requests mptr->extra (a void *)
++       * be passed to it in parv[1] - here we coerce the
++       * void * to a char * to avoid making any drastic
++       * changes to the handler interface.
++       */
++      i = 1;
++      para[1] = (char *)mptr->extra;
++  } else {
++      i = 0;
++  }
++
+   if (s)
+   {
+     if (paramcount > MAXPARA)
+Index: ircd/res.c
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/Attic/res.c,v
+retrieving revision 1.19.2.6
+diff -u -r1.19.2.6 res.c
+--- ircd/res.c	11 Jan 2004 00:23:32 -0000	1.19.2.6
++++ ircd/res.c	1 May 2010 21:19:01 -0000
+@@ -44,6 +44,7 @@
+ #include <regex.h>
+ 
+ #include <arpa/nameser.h>
++#include <arpa/nameser_compat.h>
+ #include <resolv.h>
+ #include <netdb.h>
+ #include <arpa/inet.h>
+Index: ircd/s_auth.c
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/s_auth.c,v
+retrieving revision 1.21.2.6
+diff -u -r1.21.2.6 s_auth.c
+--- ircd/s_auth.c	11 Jan 2004 00:23:32 -0000	1.21.2.6
++++ ircd/s_auth.c	1 May 2010 21:19:01 -0000
+@@ -46,6 +46,7 @@
+ #include "querycmds.h"
+ #include "res.h"
+ #include "s_bsd.h"
++#include "s_conf.h"
+ #include "s_debug.h"
+ #include "s_misc.h"
+ #include "send.h"
+@@ -82,6 +83,7 @@
+   { "NOTICE AUTH :*** No ident response\r\n",              36 },
+   { "NOTICE AUTH :*** Your forward and reverse DNS do not match, " \
+     "ignoring hostname.\r\n",                              80 },
++  { "NOTICE AUTH :*** Using S-line privilege\r\n",         41 },
+   { "NOTICE AUTH :*** Invalid hostname\r\n",               35 }
+ };
+ 
+@@ -94,6 +96,7 @@
+   REPORT_FIN_ID,
+   REPORT_FAIL_ID,
+   REPORT_IP_MISMATCH,
++  REPORT_USING_SLINE,
+   REPORT_INVAL_DNS
+ } ReportType;
+ 
+@@ -596,6 +599,13 @@
+ 
+   assert(0 != client);
+ 
++  if (conf_check_slines(client)) {
++    sendheader(client, REPORT_USING_SLINE);
++    SetSLined(client);
++    release_auth_client(client);
++    return;
++  }
++
+   auth = make_auth_request(client);
+   assert(0 != auth);
+ 
+Index: ircd/s_conf.c
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/s_conf.c,v
+retrieving revision 1.44.2.6
+diff -u -r1.44.2.6 s_conf.c
+--- ircd/s_conf.c	18 Sep 2004 02:13:29 -0000	1.44.2.6
++++ ircd/s_conf.c	1 May 2010 21:19:01 -0000
+@@ -71,6 +71,7 @@
+ 
+ struct ConfItem* GlobalConfList  = 0;
+ int              GlobalConfCount = 0;
++struct s_map*    GlobalServiceMapList = 0;
+ struct qline*    GlobalQuarantineList = 0;
+ 
+ static struct LocalConf   localConf;
+@@ -708,6 +709,99 @@
+   add_listener(atoi(fields[4]), fields[2], fields[1], is_server, is_hidden);
+ }
+ 
++static void conf_remove_service_map(struct s_map *map)
++{
++  unsigned int i;
++
++  for (i = 0; i < map->count; i++)
++  {
++    MyFree(map->services[i].nick);
++  }
++
++  MyFree(map->name);
++  MyFree(map->command);
++  MyFree(map->services);
++  MyFree(map);
++}
++
++void conf_add_service_map(const char* const* fields, int count)
++{
++  static char list[BUFSIZE + 1];
++  struct nick_host *services;
++  unsigned int used, size, i;
++  char *p, *service, *s;
++  struct s_map *map;
++
++  if (count < 4 || EmptyString(fields[1]) || EmptyString(fields[2]) ||
++      EmptyString(fields[3]))
++    return;
++
++  ircd_strncpy(list, fields[3], BUFSIZE);
++  list[BUFSIZE] = '\0';
++
++  size = 2;
++  used = 0;
++  services = (struct nick_host *)MyMalloc(sizeof(struct nick_host) * size);
++
++  p = NULL;
++  for (service = ircd_strtok(&p, list, ","); service; service = ircd_strtok(&p, NULL, ",")) {
++      char *host;
++
++      if (!*service) {
++          continue;
++      }
++
++      host = strchr(service, '@');
++      if(!*host) {
++          continue;
++      }
++
++      if (used == size) {
++          size <<= 1;
++          services = MyRealloc(services, sizeof(char *) * size);
++      }
++
++      DupString(services[used].nick, service);
++      services[used].host = services[used].nick + (host - service);
++
++      ++used;
++  }
++
++  if (!used) {
++      MyFree(services);
++      return;
++  }
++
++  map = (struct s_map *) MyMalloc(sizeof(struct s_map));
++  DupString(map->name, fields[2]);
++  DupString(map->command, fields[1]);
++  map->services = services;
++  map->count = used;
++
++  for (s = map->command; *s; s++)
++      *s = toupper(*s);
++
++  if(!register_mapping(map))
++  {
++    conf_remove_service_map(map);
++    return;
++  }
++  map->next = GlobalServiceMapList;
++  GlobalServiceMapList = map;
++}
++
++void clear_service_map(void)
++{
++    struct s_map *map;
++
++    while (map = GlobalServiceMapList) {
++        GlobalServiceMapList = map->next;
++
++        unregister_mapping(map);
++        conf_remove_service_map(map);
++    }
++}
++
+ void conf_add_quarantine(const char* const* fields, int count)
+ {
+   struct qline *qline;
+@@ -1170,6 +1264,10 @@
+     case 'o':
+       aconf->status = CONF_LOCOP;
+       break;
++    case 'S':
++    case 's':
++      aconf->status = CONF_SPOOF;
++      break;
+     case 'P':                /* listen port line */
+     case 'p':        /* CONF_LISTEN_PORT */
+       conf_add_listener(field_vector, field_count);
+@@ -1180,6 +1278,11 @@
+       conf_add_quarantine(field_vector, field_count);
+       aconf->status = CONF_ILLEGAL;
+       break;
++    case 'R':
++    case 'r':
++      conf_add_service_map(field_vector, field_count);
++      aconf->status = CONF_ILLEGAL;
++      break;
+     case 'T':                /* print out different motd's */
+     case 't':                /* based on hostmask - CONF_TLINES */
+       motd_add(field_vector[1], field_vector[2]);
+@@ -1282,6 +1385,9 @@
+     if ((aconf->status == CONF_UWORLD) && (aconf->passwd) && (*aconf->passwd))
+       addNickJupes(aconf->passwd);
+ 
++    if (aconf->status & CONF_SPOOF)
++      lookup_confhost(aconf);
++
+     collapse(aconf->host);
+     collapse(aconf->name);
+     Debug((DEBUG_NOTICE,
+@@ -1360,6 +1466,7 @@
+    */
+   clearNickJupes();
+ 
++  clear_service_map();
+   clear_quarantines();
+ 
+   if (sig != 2)
+@@ -1659,3 +1766,67 @@
+   return 0;
+ }
+ 
++/*
++ * conf_check_slines()
++ *
++ * Check S lines for the specified client, passed in cptr struct.
++ * If the client's IP is S-lined, process the substitution here.
++ * 1. cptr->cli_ip                    (cli_ip(cptr))
++ * 2. cptr->cli_connect->con_sock_ip  (cli_sock_ip(cptr))
++ * 3. cptr->cli_connect->sockhost     (cli_sockhost(cptr))
++ *
++ * If no substitued IP are specified, only change sockhost.
++ *
++ * Precondition
++ *  cptr != NULL
++ *
++ * Returns
++ *  0 = No S-line found
++ *  1 = S-line found and substitution done.
++ *
++ * -mbuna 9/2001
++ *
++ */
++
++int
++conf_check_slines(struct Client *cptr)
++{
++  struct ConfItem* aconf;
++  struct in_addr iptemp;
++  char* hostonly;
++
++  for (aconf = GlobalConfList; aconf; aconf = aconf->next) {
++    if (aconf->status != CONF_SPOOF)
++      continue;
++    if ((aconf->dns_pending)
++      || (INADDR_NONE == aconf->ipnum.s_addr)
++      || EmptyString(aconf->name))
++      continue;
++
++    if (cli_ip(cptr).s_addr == aconf->ipnum.s_addr) {
++
++                               /* Ignore user part if u@h. */
++      if ((hostonly = strchr(aconf->name, '@')))
++        hostonly++;
++      else
++        hostonly = aconf->name;
++
++      if(!*hostonly)
++        continue;
++
++      if (!EmptyString(aconf->passwd)) {
++        iptemp.s_addr = inet_addr(aconf->passwd);
++        if (INADDR_NONE == iptemp.s_addr)
++          continue;
++        cli_ip(cptr).s_addr = iptemp.s_addr;
++      }
++
++                               /* Perform a luxurious ircd_ntoa for sanity. */
++      ircd_strncpy(cli_sock_ip(cptr), ircd_ntoa((const char*) &cli_ip(cptr)), SOCKIPLEN);
++      ircd_strncpy(cli_sockhost(cptr), hostonly, HOSTLEN);
++      return 1;
++    }
++  }
++  return 0;
++}
++
+Index: ircd/s_err.c
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/s_err.c,v
+retrieving revision 1.30.2.11
+diff -u -r1.30.2.11 s_err.c
+--- ircd/s_err.c	18 Sep 2004 02:13:29 -0000	1.30.2.11
++++ ircd/s_err.c	1 May 2010 21:19:01 -0000
+@@ -584,7 +584,7 @@
+ /* 275 */
+   { RPL_STATSDLINE, "%c %s %s", "275" },
+ /* 276 */
+-  { 0 },
++  { RPL_STATSRLINE, "%s %s %s", "276" },
+ /* 277 */
+   { 0 },
+ /* 278 */
+@@ -912,7 +912,7 @@
+ /* 439 */
+   { ERR_TARGETTOOFAST, "%s :Target change too fast. Please wait %d seconds.", "439" },
+ /* 440 */
+-  { 0 },
++  { ERR_SERVICESDOWN, ":The %s service is currently unavailable.", "440" },
+ /* 441 */
+   { ERR_USERNOTINCHANNEL, "%s %s :They aren't on that channel", "441" },
+ /* 442 */
+Index: ircd/s_numeric.c
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/s_numeric.c,v
+retrieving revision 1.7.2.2
+diff -u -r1.7.2.2 s_numeric.c
+--- ircd/s_numeric.c	11 Jan 2004 00:23:33 -0000	1.7.2.2
++++ ircd/s_numeric.c	1 May 2010 21:19:01 -0000
+@@ -83,7 +83,7 @@
+    * to come from the local server.
+    */
+     if (acptr)
+-      sendcmdto_one(feature_bool(FEAT_HIS_REWRITE) && !IsOper(acptr) ?
++      sendcmdto_one( (feature_bool(FEAT_HIS_REWRITE) && !IsOper(acptr)) ?
+ 		    &me : sptr, num, num, acptr, "%C %s", acptr, parv[2]);
+     else
+       sendcmdto_channel_butone(feature_bool(FEAT_HIS_REWRITE) ? &me : sptr,
+Index: ircd/s_stats.c
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/s_stats.c,v
+retrieving revision 1.16.2.10
+diff -u -r1.16.2.10 s_stats.c
+--- ircd/s_stats.c	11 Jan 2004 00:23:33 -0000	1.16.2.10
++++ ircd/s_stats.c	1 May 2010 21:19:02 -0000
+@@ -301,6 +301,19 @@
+ }
+ 
+ static void
++stats_mapping(struct Client* to, struct StatDesc* sd, int stat, char* param)
++{
++  struct s_map *map;
++
++  for (map = GlobalServiceMapList; map; map = map->next) {
++    unsigned int i;
++    for (i = 0; i < map->count; ++i) {
++      send_reply(to, RPL_STATSRLINE, map->command, map->name, map->services[i]);
++    }
++  }
++}
++
++static void
+ stats_uptime(struct Client* to, struct StatDesc* sd, int stat, char* param)
+ {
+   time_t nowr;
+@@ -427,8 +440,11 @@
+   { 'q', (STAT_FLAG_OPERONLY | STAT_FLAG_VARPARAM), FEAT_HIS_STATS_q,
+     stats_quarantine, 0,
+     "Quarantined channels list." },
++  { 'R', (STAT_FLAG_OPERFEAT | STAT_FLAG_CASESENS), FEAT_HIS_STATS_R,
++    stats_mapping, 0,
++    "Service mappings." },
+ #ifdef DEBUGMODE
+-  { 'r', STAT_FLAG_OPERFEAT, FEAT_HIS_STATS_r,
++  { 'r', (STAT_FLAG_OPERFEAT | STAT_FLAG_CASESENS), FEAT_HIS_STATS_r,
+     send_usage, 0,
+     "System resource usage (Debug only)." },
+ #endif
+Index: ircd/s_user.c
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/s_user.c,v
+retrieving revision 1.52.2.18
+diff -u -r1.52.2.18 s_user.c
+--- ircd/s_user.c	18 Sep 2004 02:13:29 -0000	1.52.2.18
++++ ircd/s_user.c	1 May 2010 21:19:02 -0000
+@@ -422,7 +422,8 @@
+ 
+     clean_user_id(user->username,
+         HasFlag(sptr, FLAG_GOTID) ? cli_username(sptr) : username,
+-        HasFlag(sptr, FLAG_DOID) && !HasFlag(sptr, FLAG_GOTID));
++        HasFlag(sptr, FLAG_DOID) && !HasFlag(sptr, FLAG_GOTID)
++        && !(HasSLine(sptr))); /* No tilde for S-lined users. */
+ 
+     if ((user->username[0] == '\0')
+         || ((user->username[0] == '~') && (user->username[1] == '\000')))
+Index: ircd/send.c
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/send.c,v
+retrieving revision 1.44.2.9
+diff -u -r1.44.2.9 send.c
+--- ircd/send.c	15 Dec 2002 01:02:44 -0000	1.44.2.9
++++ ircd/send.c	1 May 2010 21:19:02 -0000
+@@ -697,7 +697,7 @@
+    * this is ok...
+    */
+   vd.vd_format = pattern;
+-  vd.vd_args = vl;
++  va_copy(vd.vd_args, vl);
+   mb = msgq_make(0, ":%s " MSG_NOTICE " * :*** Notice -- %v", cli_name(&me),
+ 		 &vd);
+ 
