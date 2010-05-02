@@ -117,6 +117,7 @@ IRCD_SRC = \
 	m_die.c \
 	m_endburst.c \
 	m_error.c \
+	m_fakehost.c \
 	m_get.c \
 	m_gline.c \
 	m_help.c \
@@ -517,6 +518,13 @@ m_asll.o: m_asll.c ../config.h ../include/client.h ../include/ircd_defs.h \
   ../include/ircd_chattr.h ../include/numeric.h ../include/numnicks.h \
   ../include/match.h ../include/msg.h ../include/send.h \
   ../include/s_bsd.h ../include/s_user.h
+m_fakehost.o: m_fakehost.c ../config.h ../include/client.h \
+  ../include/ircd_defs.h ../include/dbuf.h ../include/msgq.h \
+  ../include/ircd_events.h ../include/ircd_handler.h ../include/hash.h \
+  ../include/ircd.h  ../include/struct.h  ../include/ircd_reply.h \
+  ../include/ircd_string.h ../include/ircd_chattr.h ../include/msg.h \
+  ../include/numeric.h ../include/numnicks.h ../include/s_conf.h \
+  ../include/s_user.h ../include/send.h
 m_away.o: m_away.c ../config.h ../include/client.h ../include/ircd_defs.h \
   ../include/dbuf.h ../include/msgq.h ../include/ircd_events.h \
   ../include/ircd_handler.h ../include/ircd.h ../include/struct.h \

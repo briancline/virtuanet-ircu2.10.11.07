@@ -100,6 +100,8 @@ enum Priv {
 
   PRIV_FORCE_OPMODE,	/* oper can override a Q-line */
   PRIV_FORCE_LOCAL_OPMODE,/* oper can override a local channel Q-line */
+  
+  PRIV_SET_FAKEHOST,
 
   PRIV_LAST_PRIV	/* must be the same as the last priv */
 };
@@ -146,6 +148,7 @@ enum Flag {
     FLAG_DEBUG,                     /* send global debug/anti-hack info */
     FLAG_ACCOUNT,                   /* account name has been set */
     FLAG_HIDDENHOST,                /* user's host is hidden */
+    FLAG_FAKEHOST,                  /* user has been assigned a fake host */
 
     _FLAG_COUNT,
     FLAG_LOCAL_UMODES = FLAG_LOCOP, /* First local mode flag */
@@ -428,8 +431,9 @@ struct Client {
 #define IsHub(x)                HasFlag(x, FLAG_HUB)
 #define IsService(x)            HasFlag(x, FLAG_SERVICE)
 #define IsAccount(x)            HasFlag(x, FLAG_ACCOUNT)
-#define IsHiddenHost(x)		HasFlag(x, FLAG_HIDDENHOST)
-#define HasHiddenHost(x)	(IsAccount(x) && IsHiddenHost(x))
+#define IsHiddenHost(x)         HasFlag(x, FLAG_HIDDENHOST)
+#define HasHiddenHost(x)        (IsHiddenHost(x) && (IsAccount(x) || HasFakeHost(x)))
+#define HasFakeHost(x)          HasFlag(x, FLAG_FAKEHOST)
 #define HasSLine(x)             HasFlag(x, FLAG_SLINE)
 
 #define IsPrivileged(x)         (IsAnOper(x) || IsServer(x))
@@ -452,7 +456,8 @@ struct Client {
 #define SetHub(x)               SetFlag(x, FLAG_HUB)
 #define SetService(x)           SetFlag(x, FLAG_SERVICE)
 #define SetAccount(x)           SetFlag(x, FLAG_ACCOUNT)
-#define SetHiddenHost(x)	SetFlag(x, FLAG_HIDDENHOST)
+#define SetHiddenHost(x)        SetFlag(x, FLAG_HIDDENHOST)
+#define SetFakeHost(x)          SetFlag(x, FLAG_FAKEHOST)
 #define SetSLined(x)            SetFlag(x, FLAG_SLINE)
 
 #define ClearAccess(x)          ClrFlag(x, FLAG_CHKACCESS)
@@ -468,7 +473,8 @@ struct Client {
 #define ClearUPing(x)           ClrFlag(x, FLAG_UPING)
 #define ClearWallops(x)         ClrFlag(x, FLAG_WALLOP)
 #define ClearServNotice(x)      ClrFlag(x, FLAG_SERVNOTICE)
-#define ClearHiddenHost(x)	ClrFlag(x, FLAG_HIDDENHOST)
+#define ClearHiddenHost(x)      ClrFlag(x, FLAG_HIDDENHOST)
+#define ClearFakeHost(x)        ClrFlag(x, FLAG_FAKEHOST)
 
 #define SeeOper(sptr,acptr) (IsAnOper(acptr) && (HasPriv(acptr, PRIV_DISPLAY) \
                             || HasPriv(sptr, PRIV_SEE_OPERS)))
@@ -534,6 +540,7 @@ typedef enum ShowIPType {
 } ShowIPType;
 
 extern const char* get_client_name(const struct Client* sptr, int showip);
+extern const char* client_get_default_fakehost(const struct Client* sptr);
 extern int client_get_ping(const struct Client* local_client);
 extern void client_drop_sendq(struct Connection* con);
 extern void client_add_sendq(struct Connection* con,

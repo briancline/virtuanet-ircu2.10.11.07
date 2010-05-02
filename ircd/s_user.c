@@ -348,6 +348,7 @@ int register_user(struct Client *cptr, struct Client *sptr,
                   const char *nick, char *username)
 {
   struct ConfItem* aconf;
+  const char*      fakehost;
   char*            parv[3];
   char*            tmpstr;
   char*            tmpstr2;
@@ -364,6 +365,7 @@ int register_user(struct Client *cptr, struct Client *sptr,
   struct User*     user = cli_user(sptr);
   int              killreason;
   char             ip_base64[8];
+  struct Flags     setflags;
 
   user->last = CurrentTime;
   parv[0] = cli_name(sptr);
@@ -418,6 +420,11 @@ int register_user(struct Client *cptr, struct Client *sptr,
     }
     ircd_strncpy(user->host, cli_sockhost(sptr), HOSTLEN);
     ircd_strncpy(user->realhost, cli_sockhost(sptr), HOSTLEN);
+    fakehost = client_get_default_fakehost(sptr);
+    if (fakehost) {
+      ircd_strncpy(user->fakehost, fakehost, HOSTLEN);
+      SetFakeHost(sptr);
+    }
     aconf = cli_confs(sptr)->value.aconf;
 
     clean_user_id(user->username,
@@ -647,7 +654,8 @@ static const struct UserMode {
   { FLAG_CHSERV,      'k' },
   { FLAG_DEBUG,       'g' },
   { FLAG_ACCOUNT,     'r' },
-  { FLAG_HIDDENHOST,  'x' }
+  { FLAG_HIDDENHOST,  'x' },
+  { FLAG_FAKEHOST,    'f' }
 };
 
 #define USERMODELIST_SIZE sizeof(userModeList) / sizeof(struct UserMode)
@@ -662,6 +670,7 @@ int set_nick_name(struct Client* cptr, struct Client* sptr,
 {
   if (IsServer(sptr)) {
     int   i;
+    const char* fakehost = 0;
     const char* account = 0;
     const char* p;
 
@@ -674,12 +683,15 @@ int set_nick_name(struct Client* cptr, struct Client* sptr,
     cli_hopcount(new_client) = atoi(parv[2]);
     cli_lastnick(new_client) = atoi(parv[3]);
     if (Protocol(cptr) > 9 && parc > 7 && *parv[6] == '+') {
+      int argi = 7;
       for (p = parv[6] + 1; *p; p++) {
         for (i = 0; i < USERMODELIST_SIZE; ++i) {
           if (userModeList[i].c == *p) {
             SetFlag(new_client, userModeList[i].flag);
-	    if (userModeList[i].flag == FLAG_ACCOUNT)
-	      account = parv[7];
+      	    if (userModeList[i].flag == FLAG_ACCOUNT)
+      	      account = parv[argi++];
+      	    else if (userModeList[i].flag == FLAG_FAKEHOST)
+              fakehost = parv[argi++];
             break;
           }
         }
@@ -709,17 +721,20 @@ int set_nick_name(struct Client* cptr, struct Client* sptr,
     if (account) {
       int len = ACCOUNTLEN;
       if ((p = strchr(account, ':'))) {
-	len = (p++) - account;
-	cli_user(new_client)->acc_create = atoi(p);
-	Debug((DEBUG_DEBUG, "Received timestamped account in user mode; "
-	       "account \"%s\", timestamp %Tu", account,
-	       cli_user(new_client)->acc_create));
+      	len = (p++) - account;
+      	cli_user(new_client)->acc_create = atoi(p);
+      	Debug((DEBUG_DEBUG, "Received timestamped account in user mode; "
+      	       "account \"%s\", timestamp %Tu", account,
+      	       cli_user(new_client)->acc_create));
       }
       ircd_strncpy(cli_user(new_client)->account, account, len);
     }
+    if (fakehost) {
+      SetFakeHost(new_client);
+      ircd_strncpy(cli_user(new_client)->fakehost, fakehost, HOSTLEN);
+    }
     if (HasHiddenHost(new_client))
-      ircd_snprintf(0, cli_user(new_client)->host, HOSTLEN, "%s.%s",
-        account, feature_str(FEAT_HIDDEN_HOST));
+      make_hidden_hostmask(cli_user(new_client)->host, new_client);
 
     return register_user(cptr, new_client, cli_name(new_client), parv[4]);
   }
@@ -1051,16 +1066,44 @@ void send_user_info(struct Client* sptr, char* names, int rpl, InfoFormatter fmt
 }
 
 /*
+ * make_hidden_hostmask()
+ * 
+ * Generates a user's hidden hostmask based on their account unless
+ * they have a custom [vanity] host set. This function expects a
+ * buffer of sufficient size to hold the resulting hostmask.
+ */
+void make_hidden_hostmask(char *buffer, struct Client *cptr)
+{
+  assert(HasFakeHost(cptr) || IsAccount(cptr));
+  
+  if (HasFakeHost(cptr)) {
+    /* The user has a fake host; make that their hidden hostmask; */
+    ircd_strncpy(buffer, cli_user(cptr)->fakehost, HOSTLEN);
+    return;
+  }
+  
+  if (IsAccount(cptr)) {
+    /* Generate a hidden host based on the user's account name. */
+    ircd_snprintf(0, buffer, HOSTLEN, "%s.%s", cli_user(cptr)->account,
+                  feature_str(FEAT_HIDDEN_HOST));
+    return;
+  }
+}
+
+/*
  * hide_hostmask()
  *
  * If, after setting the flags, the user has both HiddenHost and Account
  * set, its hostmask is changed.
  */
-int hide_hostmask(struct Client *cptr, unsigned int flag)
+int hide_hostmask(struct Client *cptr)
 {
   struct Membership *chan;
 
-  if (MyConnect(cptr) && !feature_bool(FEAT_HOST_HIDING) && (flag == FLAG_HIDDENHOST))
+  if (MyConnect(cptr) && !feature_bool(FEAT_HOST_HIDING))
+    return 0;
+  
+  if (!HasHiddenHost(cptr))
     return 0;
     
 /* Invalidate all bans against the user so we check them again */
@@ -1068,17 +1111,9 @@ int hide_hostmask(struct Client *cptr, unsigned int flag)
            chan = chan->next_channel)
         ClearBanValid(chan);
 
-  if (((flag == FLAG_HIDDENHOST) && !HasFlag(cptr, FLAG_ACCOUNT))
-      || ((flag == FLAG_ACCOUNT) && !HasFlag(cptr, FLAG_HIDDENHOST))) {
-    /* The user doesn't have both flags, don't change the hostmask */
-    SetFlag(cptr, flag);
-    return 0;
-  }
-
   sendcmdto_common_channels_butone(cptr, CMD_QUIT, cptr, ":Registered");
-  ircd_snprintf(0, cli_user(cptr)->host, HOSTLEN, "%s.%s",
-    cli_user(cptr)->account, feature_str(FEAT_HIDDEN_HOST));
-  SetFlag(cptr, flag);
+  make_hidden_hostmask(cli_user(cptr)->host, cptr);
+  //SetFlag(cptr, flag);
 
   /* ok, the client is now fully hidden, so let them know -- hikari */
   if (MyConnect(cptr))
@@ -1155,7 +1190,8 @@ int set_user_mode(struct Client *cptr, struct Client *sptr, int parc, char *parv
     *m++ = '+';
     for (i = 0; i < USERMODELIST_SIZE; ++i) {
       if (HasFlag(sptr, userModeList[i].flag) &&
-	  (userModeList[i].flag != FLAG_ACCOUNT))
+      	  (userModeList[i].flag != FLAG_ACCOUNT) &&
+      	  (userModeList[i].flag != FLAG_FAKEHOST))
         *m++ = userModeList[i].c;
     }
     *m = '\0';
@@ -1257,9 +1293,12 @@ int set_user_mode(struct Client *cptr, struct Client *sptr, int parc, char *parv
           ClearDebug(sptr);
         break;
       case 'x':
-        if (what == MODE_ADD)
-	  do_host_hiding = 1;
-	break;
+        if (what == MODE_ADD) {
+          SetHiddenHost(sptr);
+          if (!FlagHas(&setflags, FLAG_HIDDENHOST))
+            do_host_hiding = 1;
+        }
+        break;
 	/* if none of the given case is valid then compain by 
 	 * sending raw 501 ( ERR_UMODEUNKNOWNFLAG )
 	 */
@@ -1332,8 +1371,8 @@ int set_user_mode(struct Client *cptr, struct Client *sptr, int parc, char *parv
     --UserStats.inv_clients;
   if (!FlagHas(&setflags, FLAG_INVISIBLE) && IsInvisible(sptr))
     ++UserStats.inv_clients;
-  if (!FlagHas(&setflags, FLAG_HIDDENHOST) && do_host_hiding)
-    hide_hostmask(sptr, FLAG_HIDDENHOST);
+  if (do_host_hiding)
+    hide_hostmask(sptr);
   send_umode_out(cptr, sptr, &setflags, prop);
 
   return 0;
@@ -1367,7 +1406,16 @@ char *umode_str(struct Client *cptr)
     *m++ = ' ';
     while ((*m++ = *t++))
       ; /* Empty loop */
-
+    m--; /* back up to '\0' */
+  }
+  
+  if (HasFakeHost(cptr)) {
+    char* t = cli_user(cptr)->fakehost;
+    
+    *m++ = ' ';
+    while ((*m++ = *t++))
+      ; /* Empty loop */
+    
     if (cli_user(cptr)->acc_create) {
       char nbuf[20];
       Debug((DEBUG_DEBUG, "Sending timestamped account in user mode for "
@@ -1408,6 +1456,8 @@ void send_umode(struct Client *cptr, struct Client *sptr, struct Flags *old, int
   for (i = 0; i < USERMODELIST_SIZE; ++i) {
     flag = userModeList[i].flag;
     if (FlagHas(old, flag) == HasFlag(sptr, flag))
+      continue;
+    if (flag == FLAG_ACCOUNT || flag == FLAG_FAKEHOST)
       continue;
     switch (sendset)
     {

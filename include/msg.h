@@ -338,6 +338,10 @@ struct Client;
 #define TOK_ASLL		"LL"
 #define CMD_ASLL		MSG_ASLL, TOK_ASLL
 
+#define MSG_FAKEHOST		"FAKE"		/* FAKE */
+#define TOK_FAKEHOST		"FA"
+#define CMD_FAKEHOST		MSG_FAKEHOST, TOK_FAKEHOST
+
 #define MSG_POST                "POST"          /* POST */
 #define TOK_POST                "POST"
 

@@ -68,6 +68,25 @@ int client_get_ping(const struct Client* acptr)
 }
 
 /*
+ * client_get_default_fakehost
+ * returns default fakehost in attached client connection class
+ */
+const char* client_get_default_fakehost(const struct Client* sptr)
+{
+  struct ConfItem* aconf;
+  struct SLink* link;
+   
+  assert(cli_verify(sptr));
+   
+  for (link = cli_confs(sptr); link; link = link->next) {
+     aconf = link->value.aconf;
+     if ((aconf->status & CONF_CLIENT) && ConfFakehost(aconf))
+       return ConfFakehost(aconf);
+  }
+  return NULL;
+}
+
+/*
  * client_drop_sendq
  * removes the client's connection from the list of connections with
  * queued data
@@ -128,6 +147,7 @@ static struct {
   { PRIV_JUPE, FEAT_CONFIG_OPERCMDS, FEATFLAG_ENABLES_PRIV },
   { PRIV_OPMODE, FEAT_CONFIG_OPERCMDS, FEATFLAG_ENABLES_PRIV },
   { PRIV_BADCHAN, FEAT_CONFIG_OPERCMDS, FEATFLAG_ENABLES_PRIV },
+  { PRIV_SET_FAKEHOST, FEAT_CONFIG_OPERCMDS, FEATFLAG_ENABLES_PRIV },
 
   { PRIV_PROPAGATE, FEAT_LAST_F, FEATFLAG_GLOBAL_OPERS },
   { PRIV_SEE_OPERS, FEAT_LAST_F, FEATFLAG_GLOBAL_OPERS },
@@ -221,6 +241,7 @@ client_set_privs(struct Client* client)
     PrivSet(&antiprivs, PRIV_JUPE);
     PrivSet(&antiprivs, PRIV_OPMODE);
     PrivSet(&antiprivs, PRIV_BADCHAN);
+    PrivSet(&antiprivs, PRIV_SET_FAKEHOST);
   }
 
   for (i = 0; i <= _PRIV_IDX(PRIV_LAST_PRIV); i++)
@@ -241,7 +262,7 @@ static struct {
   P(OPMODE),         P(LOCAL_OPMODE),   P(SET),           P(WHOX),
   P(BADCHAN),        P(LOCAL_BADCHAN),  P(SEE_CHAN),      P(PROPAGATE),
   P(DISPLAY),        P(SEE_OPERS),      P(WIDE_GLINE),    P(FORCE_OPMODE),
-  P(FORCE_LOCAL_OPMODE),
+  P(FORCE_LOCAL_OPMODE), P(SET_FAKEHOST),
 #undef P
   { 0, 0 }
 };

@@ -42,6 +42,7 @@ struct ConnectionClass {
   short                   max_links;
   unsigned char           valid;
   int                     ref_count;
+  char                    *default_fakehost;
 };
 
 /*
@@ -61,6 +62,7 @@ struct ConnectionClass {
 #define ConfMaxLinks(x) ((x)->conn_class->max_links)
 #define ConfSendq(x)    ((x)->conn_class->max_sendq)
 #define ConfLinks(x)    ((x)->conn_class->ref_count)
+#define ConfFakehost(x) ((x)->conn_class->default_fakehost)
 
 /*
  * Proto types

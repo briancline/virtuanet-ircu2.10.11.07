@@ -1,4 +1,3 @@
-? .README.swp
 ? .git
 ? virtuanet.diff
 ? ircd/m_pseudo.c
@@ -9,10 +8,28 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/README,v
 retrieving revision 1.2.2.3
 diff -u -r1.2.2.3 README
 --- README	14 Sep 2002 20:44:31 -0000	1.2.2.3
-+++ README	1 May 2010 21:18:58 -0000
-@@ -1,3 +1,8 @@
++++ README	1 May 2010 23:40:26 -0000
+@@ -1,3 +1,26 @@
 +Virtuanet IRC daemon, version u2.10.11.07vn
 +Based on the original Undernet IRC daemon, version rcu2.10.11.07
++
++Virtuanet-specific features added include:
++  - S-line feature allowing server admins to cloak real hostnames and IPs
++    for admins and operators, without the use of host hiding (+x). Patch
++    originally written by mbuna.
++  - Backported from u2.10.12 the R-line feature that provides pseudo-command
++    aliases directly in the ircd for sending secure messages to network services 
++    (i.e., /ns can be mapped to /msg NS@accounts.virtuanet.org).
++  - Topic bursts are now sent as part of the normal burst process. Not sure who
++    originally wrote this patch, but send me a note if it was you so that I can 
++    credit you.
++  - ircu will now honor HIS_* settings if you turn them all off; the addition
++    of HIS_MODEWHO prevents ircu from hiding the originating server sending a 
++    MODE hack (it still cloaked the server name if every HIS_* setting was 
++    turned off).
++  - Fixes a few things related to va_arg treatment and libresolv includes to
++    allow it to compile on newer platforms (this version of ircu originally
++    came out in 2004).
 +
 +
 +--------------------------------------------------------------------------------
@@ -25,7 +42,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/doc/example.conf,v
 retrieving revision 1.15.2.11
 diff -u -r1.15.2.11 example.conf
 --- doc/example.conf	18 Sep 2004 02:13:26 -0000	1.15.2.11
-+++ doc/example.conf	1 May 2010 21:18:58 -0000
++++ doc/example.conf	1 May 2010 23:40:26 -0000
 @@ -221,15 +221,39 @@
  # As of ircu2.10.05 is it possible to Jupe nicks. Juped nicks need to be
  # added to U: lines.  As per CFV-0095, the following nicks must be juped,
@@ -146,7 +163,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/doc/readme.features,v
 retrieving revision 1.2.2.12
 diff -u -r1.2.2.12 readme.features
 --- doc/readme.features	18 Sep 2004 02:13:26 -0000	1.2.2.12
-+++ doc/readme.features	1 May 2010 21:18:59 -0000
++++ doc/readme.features	1 May 2010 23:40:28 -0000
 @@ -230,6 +230,13 @@
  times (unless you make it rather large).  A reasonable value is "total
  number of clients" / 25.
@@ -175,13 +192,36 @@ diff -u -r1.2.2.12 readme.features
  HIS_BANWHO
   * Type: boolean
   * Default: TRUE
+Index: include/class.h
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/include/class.h,v
+retrieving revision 1.10.4.2
+diff -u -r1.10.4.2 class.h
+--- include/class.h	14 Jul 2002 01:22:04 -0000	1.10.4.2
++++ include/class.h	1 May 2010 23:40:28 -0000
+@@ -42,6 +42,7 @@
+   short                   max_links;
+   unsigned char           valid;
+   int                     ref_count;
++  char                    *default_fakehost;
+ };
+ 
+ /*
+@@ -61,6 +62,7 @@
+ #define ConfMaxLinks(x) ((x)->conn_class->max_links)
+ #define ConfSendq(x)    ((x)->conn_class->max_sendq)
+ #define ConfLinks(x)    ((x)->conn_class->ref_count)
++#define ConfFakehost(x) ((x)->conn_class->default_fakehost);
+ 
+ /*
+  * Proto types
 Index: include/client.h
 ===================================================================
 RCS file: /cvsroot/undernet-ircu/ircu2.10/include/client.h,v
 retrieving revision 1.23.2.6
 diff -u -r1.23.2.6 client.h
 --- include/client.h	18 Sep 2004 02:13:26 -0000	1.23.2.6
-+++ include/client.h	1 May 2010 21:18:59 -0000
++++ include/client.h	1 May 2010 23:40:29 -0000
 @@ -127,6 +127,7 @@
      FLAG_GOTID,                     /* successful ident lookup achieved */
      FLAG_DOID,                      /* I-lines say must use ident return */
@@ -190,30 +230,72 @@ diff -u -r1.23.2.6 client.h
      FLAG_TS8,                       /* Why do you want to know? */
      FLAG_MAP,                       /* Show server on the map */
      FLAG_JUNCTION,                  /* Junction causing the net.burst */
-@@ -429,6 +430,7 @@
+@@ -145,6 +146,7 @@
+     FLAG_DEBUG,                     /* send global debug/anti-hack info */
+     FLAG_ACCOUNT,                   /* account name has been set */
+     FLAG_HIDDENHOST,                /* user's host is hidden */
++    FLAG_FAKEHOST,                  /* user has been assigned a fake host */
+ 
+     _FLAG_COUNT,
+     FLAG_LOCAL_UMODES = FLAG_LOCOP, /* First local mode flag */
+@@ -427,8 +429,10 @@
+ #define IsHub(x)                HasFlag(x, FLAG_HUB)
+ #define IsService(x)            HasFlag(x, FLAG_SERVICE)
  #define IsAccount(x)            HasFlag(x, FLAG_ACCOUNT)
- #define IsHiddenHost(x)		HasFlag(x, FLAG_HIDDENHOST)
- #define HasHiddenHost(x)	(IsAccount(x) && IsHiddenHost(x))
+-#define IsHiddenHost(x)		HasFlag(x, FLAG_HIDDENHOST)
+-#define HasHiddenHost(x)	(IsAccount(x) && IsHiddenHost(x))
++#define IsHiddenHost(x)         HasFlag(x, FLAG_HIDDENHOST)
++#define HasHiddenHost(x)        (IsHiddenHost(x) && (IsAccount(x) || HasFakeHost(x)))
++#define HasFakeHost(x)          HasFlag(x, FLAG_FAKEHOST)
 +#define HasSLine(x)             HasFlag(x, FLAG_SLINE)
  
  #define IsPrivileged(x)         (IsAnOper(x) || IsServer(x))
  
-@@ -451,6 +453,7 @@
+@@ -450,7 +454,9 @@
+ #define SetHub(x)               SetFlag(x, FLAG_HUB)
  #define SetService(x)           SetFlag(x, FLAG_SERVICE)
  #define SetAccount(x)           SetFlag(x, FLAG_ACCOUNT)
- #define SetHiddenHost(x)	SetFlag(x, FLAG_HIDDENHOST)
+-#define SetHiddenHost(x)	SetFlag(x, FLAG_HIDDENHOST)
++#define SetHiddenHost(x)        SetFlag(x, FLAG_HIDDENHOST)
++#define SetFakeHost(x)          SetFlag(x, FLAG_FAKEHOST)
 +#define SetSLined(x)            SetFlag(x, FLAG_SLINE)
  
  #define ClearAccess(x)          ClrFlag(x, FLAG_CHKACCESS)
  #define ClearBurst(x)           ClrFlag(x, FLAG_BURST)
+@@ -465,7 +471,8 @@
+ #define ClearUPing(x)           ClrFlag(x, FLAG_UPING)
+ #define ClearWallops(x)         ClrFlag(x, FLAG_WALLOP)
+ #define ClearServNotice(x)      ClrFlag(x, FLAG_SERVNOTICE)
+-#define ClearHiddenHost(x)	ClrFlag(x, FLAG_HIDDENHOST)
++#define ClearHiddenHost(x)      ClrFlag(x, FLAG_HIDDENHOST)
++#define ClearFakeHost(x)        ClrFlag(x, FLAG_FAKEHOST)
+ 
+ #define SeeOper(sptr,acptr) (IsAnOper(acptr) && (HasPriv(acptr, PRIV_DISPLAY) \
+                             || HasPriv(sptr, PRIV_SEE_OPERS)))
+@@ -531,6 +538,7 @@
+ } ShowIPType;
+ 
+ extern const char* get_client_name(const struct Client* sptr, int showip);
++extern const char* client_get_default_fakehost(const struct Client* sptr);
+ extern int client_get_ping(const struct Client* local_client);
+ extern void client_drop_sendq(struct Connection* con);
+ extern void client_add_sendq(struct Connection* con,
 Index: include/handlers.h
 ===================================================================
 RCS file: /cvsroot/undernet-ircu/ircu2.10/include/handlers.h,v
 retrieving revision 1.12.2.6
 diff -u -r1.12.2.6 handlers.h
 --- include/handlers.h	15 Dec 2002 01:02:38 -0000	1.12.2.6
-+++ include/handlers.h	1 May 2010 21:18:59 -0000
-@@ -118,6 +118,7 @@
++++ include/handlers.h	1 May 2010 23:40:29 -0000
+@@ -88,6 +88,7 @@
+ extern int m_away(struct Client*, struct Client*, int, char*[]);
+ extern int m_cnotice(struct Client*, struct Client*, int, char*[]);
+ extern int m_cprivmsg(struct Client*, struct Client*, int, char*[]);
++extern int m_fakehost(struct Client*, struct Client*, int, char*[]);
+ extern int m_gline(struct Client*, struct Client*, int, char*[]);
+ extern int m_help(struct Client*, struct Client*, int, char*[]);
+ extern int m_ignore(struct Client*, struct Client*, int, char*[]);
+@@ -118,6 +119,7 @@
  extern int m_private(struct Client*, struct Client*, int, char*[]);
  extern int m_privmsg(struct Client*, struct Client*, int, char*[]);
  extern int m_proto(struct Client*, struct Client*, int, char*[]);
@@ -227,7 +309,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/include/ircd_features.h,v
 retrieving revision 1.11.2.13
 diff -u -r1.11.2.13 ircd_features.h
 --- include/ircd_features.h	18 Sep 2004 02:13:27 -0000	1.11.2.13
-+++ include/ircd_features.h	1 May 2010 21:18:59 -0000
++++ include/ircd_features.h	1 May 2010 23:40:29 -0000
 @@ -44,6 +44,7 @@
    FEAT_RANDOM_SEED,
    FEAT_DEFAULT_LIST_PARAM,
@@ -258,8 +340,19 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/include/msg.h,v
 retrieving revision 1.11.2.3
 diff -u -r1.11.2.3 msg.h
 --- include/msg.h	15 Dec 2002 01:02:38 -0000	1.11.2.3
-+++ include/msg.h	1 May 2010 21:18:59 -0000
-@@ -362,6 +362,8 @@
++++ include/msg.h	1 May 2010 23:40:30 -0000
+@@ -338,6 +338,10 @@
+ #define TOK_ASLL		"LL"
+ #define CMD_ASLL		MSG_ASLL, TOK_ASLL
+ 
++#define MSG_FAKEHOST		"FAKE"		/* FAKE */
++#define MSG_FAKEHOST		"FA"
++#define MSG_FAKEHOST		MSG_FAKEHOST, TOK_FAKEHOST
++
+ #define MSG_POST                "POST"          /* POST */
+ #define TOK_POST                "POST"
+ 
+@@ -362,6 +366,8 @@
                                           * clients.                           */
  #define   MFLG_IGNORE            0x04   /* silently ignore command from
                                           * unregistered clients */
@@ -268,7 +361,7 @@ diff -u -r1.11.2.3 msg.h
  
  /*
   * Structures
-@@ -375,6 +377,7 @@
+@@ -375,6 +381,7 @@
                                     to be used only on the average of once per 2
                                     seconds -SRB */
    unsigned int bytes;         /* bytes received for this message */
@@ -282,7 +375,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/include/numeric.h,v
 retrieving revision 1.18.2.6
 diff -u -r1.18.2.6 numeric.h
 --- include/numeric.h	7 Jan 2003 11:15:41 -0000	1.18.2.6
-+++ include/numeric.h	1 May 2010 21:18:59 -0000
++++ include/numeric.h	1 May 2010 23:40:30 -0000
 @@ -171,6 +171,7 @@
  /*      RPL_END_NOTIFY       274           aircd */
  /*      RPL_STATSDELTA       274           IRCnet extension */
@@ -306,7 +399,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/include/parse.h,v
 retrieving revision 1.2
 diff -u -r1.2 parse.h
 --- include/parse.h	18 Mar 2000 05:20:28 -0000	1.2
-+++ include/parse.h	1 May 2010 21:18:59 -0000
++++ include/parse.h	1 May 2010 23:40:30 -0000
 @@ -7,6 +7,7 @@
  #define INCLUDED_parse_h
  
@@ -329,7 +422,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/include/patchlevel.h,v
 retrieving revision 1.10.4.66
 diff -u -r1.10.4.66 patchlevel.h
 --- include/patchlevel.h	18 Sep 2004 02:13:27 -0000	1.10.4.66
-+++ include/patchlevel.h	1 May 2010 21:18:59 -0000
++++ include/patchlevel.h	1 May 2010 23:40:30 -0000
 @@ -18,7 +18,7 @@
   * $Id: patchlevel.h,v 1.10.4.66 2004/09/18 02:13:27 klmitch Exp $
   *
@@ -345,7 +438,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/include/s_conf.h,v
 retrieving revision 1.15.2.2
 diff -u -r1.15.2.2 s_conf.h
 --- include/s_conf.h	18 Sep 2004 02:13:27 -0000	1.15.2.2
-+++ include/s_conf.h	1 May 2010 21:18:59 -0000
++++ include/s_conf.h	1 May 2010 23:40:30 -0000
 @@ -21,6 +21,7 @@
  struct Client;
  struct SLink;
@@ -391,13 +484,45 @@ diff -u -r1.15.2.2 s_conf.h
  extern struct qline*	GlobalQuarantineList;
  
  /*
+Index: include/s_user.h
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/include/s_user.h,v
+retrieving revision 1.12.2.3
+diff -u -r1.12.2.3 s_user.h
+--- include/s_user.h	15 Dec 2002 01:02:38 -0000	1.12.2.3
++++ include/s_user.h	1 May 2010 23:40:30 -0000
+@@ -77,7 +77,8 @@
+                            InfoFormatter fmt);
+ extern int add_silence(struct Client* sptr, const char* mask);
+ 
+-extern int hide_hostmask(struct Client *cptr, unsigned int flag);
++extern void make_hidden_hostmask(char* buffer, struct Client *cptr);
++extern int hide_hostmask(struct Client *cptr);
+ extern int set_user_mode(struct Client *cptr, struct Client *sptr,
+                          int parc, char *parv[]);
+ extern int is_silenced(struct Client *sptr, struct Client *acptr);
+Index: include/struct.h
+===================================================================
+RCS file: /cvsroot/undernet-ircu/ircu2.10/include/struct.h,v
+retrieving revision 1.2.46.4
+diff -u -r1.2.46.4 struct.h
+--- include/struct.h	18 Sep 2004 02:13:27 -0000	1.2.46.4
++++ include/struct.h	1 May 2010 23:40:30 -0000
+@@ -75,6 +75,7 @@
+   char               username[USERLEN + 1];
+   char               host[HOSTLEN + 1];
+   char               realhost[HOSTLEN + 1];
++  char               fakehost[HOSTLEN + 1];
+   char               account[ACCOUNTLEN + 1];
+   time_t	     acc_create;
+ };
 Index: ircd/Makefile.in
 ===================================================================
 RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/Makefile.in,v
 retrieving revision 1.37.2.11
 diff -u -r1.37.2.11 Makefile.in
 --- ircd/Makefile.in	1 Nov 2003 10:19:09 -0000	1.37.2.11
-+++ ircd/Makefile.in	1 May 2010 21:18:59 -0000
++++ ircd/Makefile.in	1 May 2010 23:40:31 -0000
 @@ -145,6 +145,7 @@
  	m_privmsg.c \
  	m_privs.c \
@@ -412,7 +537,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/channel.c,v
 retrieving revision 1.73.2.16
 diff -u -r1.73.2.16 channel.c
 --- ircd/channel.c	18 Sep 2004 02:13:27 -0000	1.73.2.16
-+++ ircd/channel.c	1 May 2010 21:19:00 -0000
++++ ircd/channel.c	1 May 2010 23:40:33 -0000
 @@ -848,6 +848,10 @@
      msgq_clean(mb);
    }                             /* Continue when there was something
@@ -440,7 +565,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/ircd_features.c,v
 retrieving revision 1.15.2.14
 diff -u -r1.15.2.14 ircd_features.c
 --- ircd/ircd_features.c	18 Sep 2004 02:13:28 -0000	1.15.2.14
-+++ ircd/ircd_features.c	1 May 2010 21:19:00 -0000
++++ ircd/ircd_features.c	1 May 2010 23:40:34 -0000
 @@ -234,7 +234,7 @@
    /* Misc. features */
    F_N(LOG, FEAT_MYOPER, feature_log_set, feature_log_reset, feature_log_get,
@@ -551,7 +676,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/ircd_log.c,v
 retrieving revision 1.12.2.2
 diff -u -r1.12.2.2 ircd_log.c
 --- ircd/ircd_log.c	24 Aug 2002 16:08:48 -0000	1.12.2.2
-+++ ircd/ircd_log.c	1 May 2010 21:19:00 -0000
++++ ircd/ircd_log.c	1 May 2010 23:40:35 -0000
 @@ -395,7 +395,7 @@
  
    /* Build the basic log string */
@@ -567,7 +692,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/m_topic.c,v
 retrieving revision 1.9.2.3
 diff -u -r1.9.2.3 m_topic.c
 --- ircd/m_topic.c	18 Sep 2004 02:13:28 -0000	1.9.2.3
-+++ ircd/m_topic.c	1 May 2010 21:19:00 -0000
++++ ircd/m_topic.c	1 May 2010 23:40:35 -0000
 @@ -93,13 +93,15 @@
  #include "send.h"
  
@@ -644,7 +769,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/parse.c,v
 retrieving revision 1.30.2.10
 diff -u -r1.30.2.10 parse.c
 --- ircd/parse.c	18 Sep 2004 02:13:28 -0000	1.30.2.10
-+++ ircd/parse.c	1 May 2010 21:19:01 -0000
++++ ircd/parse.c	1 May 2010 23:40:36 -0000
 @@ -67,518 +67,518 @@
    {
      MSG_PRIVATE,
@@ -1440,7 +1565,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/Attic/res.c,v
 retrieving revision 1.19.2.6
 diff -u -r1.19.2.6 res.c
 --- ircd/res.c	11 Jan 2004 00:23:32 -0000	1.19.2.6
-+++ ircd/res.c	1 May 2010 21:19:01 -0000
++++ ircd/res.c	1 May 2010 23:40:37 -0000
 @@ -44,6 +44,7 @@
  #include <regex.h>
  
@@ -1455,7 +1580,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/s_auth.c,v
 retrieving revision 1.21.2.6
 diff -u -r1.21.2.6 s_auth.c
 --- ircd/s_auth.c	11 Jan 2004 00:23:32 -0000	1.21.2.6
-+++ ircd/s_auth.c	1 May 2010 21:19:01 -0000
++++ ircd/s_auth.c	1 May 2010 23:40:37 -0000
 @@ -46,6 +46,7 @@
  #include "querycmds.h"
  #include "res.h"
@@ -1500,7 +1625,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/s_conf.c,v
 retrieving revision 1.44.2.6
 diff -u -r1.44.2.6 s_conf.c
 --- ircd/s_conf.c	18 Sep 2004 02:13:29 -0000	1.44.2.6
-+++ ircd/s_conf.c	1 May 2010 21:19:01 -0000
++++ ircd/s_conf.c	1 May 2010 23:40:39 -0000
 @@ -71,6 +71,7 @@
  
  struct ConfItem* GlobalConfList  = 0;
@@ -1724,7 +1849,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/s_err.c,v
 retrieving revision 1.30.2.11
 diff -u -r1.30.2.11 s_err.c
 --- ircd/s_err.c	18 Sep 2004 02:13:29 -0000	1.30.2.11
-+++ ircd/s_err.c	1 May 2010 21:19:01 -0000
++++ ircd/s_err.c	1 May 2010 23:40:40 -0000
 @@ -584,7 +584,7 @@
  /* 275 */
    { RPL_STATSDLINE, "%c %s %s", "275" },
@@ -1749,7 +1874,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/s_numeric.c,v
 retrieving revision 1.7.2.2
 diff -u -r1.7.2.2 s_numeric.c
 --- ircd/s_numeric.c	11 Jan 2004 00:23:33 -0000	1.7.2.2
-+++ ircd/s_numeric.c	1 May 2010 21:19:01 -0000
++++ ircd/s_numeric.c	1 May 2010 23:40:40 -0000
 @@ -83,7 +83,7 @@
     * to come from the local server.
     */
@@ -1765,7 +1890,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/s_stats.c,v
 retrieving revision 1.16.2.10
 diff -u -r1.16.2.10 s_stats.c
 --- ircd/s_stats.c	11 Jan 2004 00:23:33 -0000	1.16.2.10
-+++ ircd/s_stats.c	1 May 2010 21:19:02 -0000
++++ ircd/s_stats.c	1 May 2010 23:40:40 -0000
 @@ -301,6 +301,19 @@
  }
  
@@ -1805,7 +1930,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/s_user.c,v
 retrieving revision 1.52.2.18
 diff -u -r1.52.2.18 s_user.c
 --- ircd/s_user.c	18 Sep 2004 02:13:29 -0000	1.52.2.18
-+++ ircd/s_user.c	1 May 2010 21:19:02 -0000
++++ ircd/s_user.c	1 May 2010 23:40:41 -0000
 @@ -422,7 +422,8 @@
  
      clean_user_id(user->username,
@@ -1822,7 +1947,7 @@ RCS file: /cvsroot/undernet-ircu/ircu2.10/ircd/send.c,v
 retrieving revision 1.44.2.9
 diff -u -r1.44.2.9 send.c
 --- ircd/send.c	15 Dec 2002 01:02:44 -0000	1.44.2.9
-+++ ircd/send.c	1 May 2010 21:19:02 -0000
++++ ircd/send.c	1 May 2010 23:40:41 -0000
 @@ -697,7 +697,7 @@
     * this is ok...
     */

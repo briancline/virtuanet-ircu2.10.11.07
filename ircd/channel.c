@@ -414,6 +414,7 @@ static int is_banned(struct Client *cptr, struct Channel *chptr,
   char          nu_ip[NUI_BUFSIZE];
   char*         s;
   char*         sr = NULL;
+  char*         sr2 = NULL;
   char*         ip_s = NULL;
 
   if (!IsUser(cptr))
@@ -426,10 +427,16 @@ static int is_banned(struct Client *cptr, struct Channel *chptr,
 			  (cli_user(cptr))->host);
 
   if (IsAccount(cptr)) {
-     if (HasHiddenHost(cptr))
+     if (HasHiddenHost(cptr)) {
         sr = make_nick_user_host(nu_realhost, cli_name(cptr),
                                 cli_user(cptr)->username,
                                 cli_user(cptr)->realhost);
+        if (HasFakeHost(cptr)) {
+           ircd_snprintf(0, tmphost, HOSTLEN, "%s.%s",
+                         cli_user(cptr)->account, feature_str(FEAT_HIDDEN_HOST));
+           sr2 = tmphost;
+        }
+     }
      else {
         ircd_snprintf(0, tmphost, HOSTLEN, "%s.%s",
                       cli_user(cptr)->account, feature_str(FEAT_HIDDEN_HOST));
@@ -451,6 +458,8 @@ static int is_banned(struct Client *cptr, struct Channel *chptr,
       break;
     else if (sr && match(tmp->value.ban.banstr, sr) == 0)
       break;
+    else if (sr2 && match(tmp->value.ban.banstr, sr2) == 0)
+		break;
   }
 
   if (member) {
